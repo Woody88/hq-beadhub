@@ -140,7 +140,7 @@ For production deployments, create a `docker-compose.prod.yml`:
 ```yaml
 services:
   api:
-    image: ghcr.io/juanre/beadhub:latest
+    image: ghcr.io/beadhub/beadhub:latest
     environment:
       - BEADHUB_DATABASE_URL=postgresql://beadhub:${POSTGRES_PASSWORD}@postgres:5432/beadhub
       - BEADHUB_REDIS_URL=redis://redis:6379/0

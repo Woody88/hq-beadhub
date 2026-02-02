@@ -18,22 +18,23 @@ Local development typically uses sibling checkouts:
 beadhub-all/
   beadhub/      # this repo (beads + repo/workspace context; embeds aweb routes)
   aweb/         # aweb protocol server (standalone OSS implementation)
-  aweb-go/      # Go client + `aw` CLI
+  aw/           # Go client + `aw` CLI (github.com/awebai/aw)
+  bdh/          # BeadHub CLI (github.com/beadhub/bdh)
 ```
 
 Key wiring:
 
 - Python: `beadhub` depends on `aweb` and, for local development, uses a `uv` source override in `pyproject.toml` (`[tool.uv.sources] aweb = { path = "../aweb" }`).
-- Go: `bdh/go.mod` uses a local replace to `../../aweb-go` for development.
 
 ## Quick Start
 
 ```bash
 # Clone sibling repos (recommended for development)
 mkdir -p beadhub-all && cd beadhub-all
-git clone https://github.com/juanre/beadhub.git
-git clone https://github.com/juanre/aweb.git
-git clone https://github.com/juanre/aweb-go.git
+git clone https://github.com/beadhub/beadhub.git
+git clone https://github.com/awebai/aweb.git
+git clone https://github.com/awebai/aw.git
+git clone https://github.com/beadhub/bdh.git
 
 cd beadhub
 
@@ -229,11 +230,11 @@ To run the extracted sibling repos too:
 # aweb (protocol server implementation)
 cd ../aweb && uv run pytest
 
-# aweb-go (Go client + aw CLI)
-cd ../aweb-go && go test ./...
+# aw (Go client + aw CLI)
+cd ../aw && go test ./...
 
 # bdh (BeadHub CLI)
-cd ../beadhub/bdh && go test ./...
+cd ../bdh && go test ./...
 ```
 
 ### Test Structure

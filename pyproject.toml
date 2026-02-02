@@ -34,10 +34,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/juanre/beadhub"
-Documentation = "https://github.com/juanre/beadhub#readme"
-Repository = "https://github.com/juanre/beadhub.git"
-Issues = "https://github.com/juanre/beadhub/issues"
+Homepage = "https://github.com/beadhub/beadhub"
+Documentation = "https://github.com/beadhub/beadhub#readme"
+Repository = "https://github.com/beadhub/beadhub.git"
+Issues = "https://github.com/beadhub/beadhub/issues"
 
 [project.scripts]
 beadhub = "beadhub:main"

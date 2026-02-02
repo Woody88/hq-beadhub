@@ -10,9 +10,9 @@
 # All modes can run simultaneously on different ports.
 
 .PHONY: help start stop dev-backend dev-frontend dev-stop dev-setup dev-check docker docker-stop docker-rebuild docker-clean \
-        _docker-start _docker-rebuild logs status clean-all prune bdh reset-server-schema health \
+        _docker-start _docker-rebuild logs status clean-all prune reset-server-schema health \
         check-python fmt-python lint-python typecheck-python \
-        check-frontend check-bdh check hooks-install \
+        check-frontend check hooks-install \
         test-instance-setup test-instance-backend test-instance-frontend test-instance-stop test-instance-clean
 
 # Default env file (can be overridden)
@@ -78,14 +78,12 @@ help:
 	@echo "    make logs           - Follow docker logs"
 	@echo "    make status         - Show service status"
 	@echo "    make clean-all      - Stop and remove ALL beadhub containers"
-	@echo "    make bdh            - Build the bdh Go binary"
 	@echo "    make reset-server-schema - Drop server/beads schemas (fixes migration errors)"
 	@echo "    make reset-dev-db   - Drop and recreate the dev database (no backwards-compat)"
 	@echo "    make check-python   - Run Python format/lint/typecheck"
 	@echo "    make fmt-python     - Auto-format Python (black/isort/ruff)"
 	@echo "    make check-frontend - Run frontend lint/build checks"
-	@echo "    make check-bdh      - Run bdh Go tests"
-	@echo "    make check          - Run all checks (python + frontend + bdh)"
+	@echo "    make check          - Run all checks (python + frontend)"
 	@echo "    make hooks-install  - Install git hooks (pre-push checks + bd sync)"
 	@echo ""
 	@echo "  Port Allocation:"
@@ -107,7 +105,7 @@ start:
 	@echo "  Dashboard: http://localhost:8000"
 	@echo ""
 	@echo "Next steps:"
-	@echo "  1. Install bdh: curl -fsSL https://raw.githubusercontent.com/juanre/beadhub/main/bdh/install.sh | bash"
+	@echo "  1. Install bdh: curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash"
 	@echo "  2. In your repo: bdh :init"
 	@echo ""
 	@$(MAKE) health BEADHUB_PORT=8000
@@ -350,14 +348,6 @@ reset-dev-db:
 		psql "$(POSTGRES_ADMIN_URL)" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE "$(POSTGRES_DB)" OWNER "$(POSTGRES_APP_USER)";'
 	@echo "Done. Start the server to re-apply migrations."
 
-bdh:
-	@echo "Building bdh..."
-	@mkdir -p "$(CURDIR)/.cache/go-build"
-	@cd bdh && \
-	GOCACHE="$(CURDIR)/.cache/go-build" \
-	go build -ldflags "-X main.version=dev -X main.commit=$$(git rev-parse --short HEAD) -X main.date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o bdh ./cmd/bdh
-	@echo "Built: ./bdh/bdh"
-
 #
 # Test Instance (clean slate for UI testing)
 #
@@ -455,13 +445,7 @@ check-python: lint-python typecheck-python
 check-frontend:
 	cd frontend && pnpm lint && pnpm build
 
-check-bdh:
-	@mkdir -p "$(CURDIR)/.cache/go-build"
-	@cd bdh && \
-	GOCACHE="$(CURDIR)/.cache/go-build" \
-	golangci-lint run ./...
-
-check: check-python check-frontend check-bdh
+check: check-python check-frontend
 
 hooks-install:
 	@mkdir -p .git/hooks

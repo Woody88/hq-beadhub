@@ -19,12 +19,12 @@ Prerequisites:
 
 ```bash
 # Start the BeadHub server
-git clone https://github.com/juanre/beadhub.git
+git clone https://github.com/beadhub/beadhub.git
 cd beadhub
 make start                              # or: POSTGRES_PASSWORD=demo docker compose up -d
 
 # Install the bdh CLI
-curl -fsSL https://raw.githubusercontent.com/juanre/beadhub/main/bdh/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
 
 # Initialize a workspace (must be a git repo with remote origin)
 cd /path/to/your-repo
