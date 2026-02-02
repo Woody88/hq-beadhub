@@ -1,0 +1,4 @@
+{"id":"bd-root","title":"Root issue","status":"open","priority":1,"issue_type":"task","created_at":"2025-11-30T00:00:00Z","updated_at":"2025-11-30T00:00:00Z"}
+{"id":"bd-child","title":"Child issue","status":"open","priority":2,"issue_type":"task","dependencies":[{"issue_id":"bd-child","depends_on_id":"bd-root","type":"blocks","created_at":"2025-11-30T00:01:00Z","created_by":"test"}],"created_at":"2025-11-30T00:01:00Z","updated_at":"2025-11-30T00:01:00Z"}
+{"id":"bd-closed","title":"Closed issue","status":"closed","priority":2,"issue_type":"task","dependencies":[{"issue_id":"bd-closed","depends_on_id":"bd-root","type":"blocks","created_at":"2025-11-30T00:02:00Z","created_by":"test"}],"created_at":"2025-11-30T00:02:00Z","updated_at":"2025-11-30T00:02:00Z","closed_at":"2025-11-30T01:02:00Z"}
+

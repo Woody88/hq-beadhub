@@ -1,0 +1,29 @@
+#!/bin/sh
+# BeadHub repo pre-commit hook
+#
+# Combines bd (beads) JSONL flush + fast code hygiene checks.
+
+set -eu
+
+# ---- beads JSONL flush (mirrors bd's hook) ----
+if command -v bd >/dev/null 2>&1 && [ -d .beads ]; then
+  SYNC_BRANCH="${BEADS_SYNC_BRANCH:-}"
+  if [ -z "$SYNC_BRANCH" ] && [ -f .beads/config.yaml ]; then
+    SYNC_BRANCH=$(grep -E '^sync-branch:' .beads/config.yaml 2>/dev/null | head -1 | sed 's/^sync-branch:[[:space:]]*//' | sed 's/^["'"'"']//' | sed 's/["'"'"']$//')
+  fi
+
+  if [ -z "$SYNC_BRANCH" ]; then
+    if ! bd sync --flush-only >/dev/null 2>&1; then
+      echo "Error: Failed to flush bd changes to JSONL" >&2
+      echo "Run 'bd sync --flush-only' manually to diagnose" >&2
+      exit 1
+    fi
+
+    for f in .beads/beads.jsonl .beads/issues.jsonl .beads/deletions.jsonl; do
+      [ -f "$f" ] && git add "$f" 2>/dev/null || true
+    done
+  fi
+fi
+
+exit 0
+

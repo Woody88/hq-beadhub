@@ -1,0 +1,71 @@
+# BeadHub
+
+Multi-agent coordination server for AI coding assistants. Provides workspace registration, file locking, messaging (mail + chat), and policy management.
+
+## Tech Stack
+
+- **Backend**: Python 3.12+, FastAPI, PostgreSQL (via pgdbm)
+- **CLI (bdh)**: Go 1.21+, Cobra
+- **Package Manager**: uv (Python), go modules (Go)
+
+## Project Structure
+
+```
+src/beadhub/          # Python server
+  routes/             # FastAPI endpoints
+  defaults/           # Policy defaults (markdown files)
+bdh/                  # Go CLI wrapper
+  internal/commands/  # CLI commands
+  internal/client/    # HTTP client
+```
+
+## Development
+
+**Run server:**
+```bash
+uv run beadhub
+```
+
+**Build CLI:**
+```bash
+make bdh
+```
+
+**Run tests:**
+```bash
+uv run pytest              # Python tests
+cd bdh && go test ./...    # Go tests
+```
+
+## Key Concepts
+
+- **Workspace**: An agent instance registered with a project (has alias, role, human name)
+- **Policy**: Project-level invariants + role playbooks that guide agent behavior
+- **Mail**: Async messages between workspaces (`bdh :mail --send`)
+- **Chat**: Sync conversations with wait/reply semantics (`bdh :chat`)
+- **Reservations**: File locks to prevent edit conflicts
+
+## Architecture Notes
+
+- Server uses pgdbm for PostgreSQL with template-based table naming
+- CLI wraps `bd` (beads) for issue tracking, adds coordination features
+- Policy defaults loaded from markdown files at startup (hot-reload via reset endpoint)
+- Auth uses per-project API keys (client sends `Authorization: Bearer ...`); bootstrap via `bdh :init` / `POST /v1/init`
+
+
+## BeadHub Coordination
+
+This project uses `bdh` for multi-agent coordination and issue tracking.
+
+**Start every session:**
+```bash
+bdh :status    # your identity + team status
+bdh :policy    # READ CAREFULLY and follow diligently
+bdh ready      # find unblocked work
+bdh --help     # command reference
+```
+
+**Key rules:**
+- Use `bdh` (not `bd`) so work is coordinated
+- Default to mail (`bdh :mail --send`); use chat (`bdh :chat`) when blocked
+- Respond immediately to WAITING notifications
