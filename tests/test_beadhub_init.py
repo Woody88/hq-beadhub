@@ -128,3 +128,40 @@ async def test_beadhub_init_rejects_invalid_workspace_path(db_infra, redis_clien
                 },
             )
             assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+async def test_beadhub_init_returns_409_when_alias_already_bound_to_different_repo(
+    db_infra, redis_client_async
+):
+    app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp1 = await client.post(
+                "/v1/init",
+                json={
+                    "project_slug": "test-init-repo-mismatch",
+                    "project_name": "test-init-repo-mismatch",
+                    "repo_origin": "git@github.com:test/repo-a.git",
+                    "alias": "mismatch-agent",
+                    "human_name": "Init User",
+                    "role": "agent",
+                },
+            )
+            assert resp1.status_code == 200, resp1.text
+
+            resp2 = await client.post(
+                "/v1/init",
+                json={
+                    "project_slug": "test-init-repo-mismatch",
+                    "project_name": "test-init-repo-mismatch",
+                    "repo_origin": "git@github.com:test/repo-b.git",
+                    "alias": "mismatch-agent",
+                    "human_name": "Init User",
+                    "role": "agent",
+                },
+            )
+            assert resp2.status_code == 409, resp2.text
+            assert "workspace_repo_mismatch" in resp2.text
+            assert "github.com/test/repo-a" in resp2.text
+            assert "github.com/test/repo-b" in resp2.text

@@ -259,9 +259,14 @@ async def init(
 
         existing = await tx.fetch_one(
             """
-            SELECT workspace_id
-            FROM {{tables.workspaces}}
-            WHERE workspace_id = $1 AND project_id = $2
+            SELECT
+                w.workspace_id,
+                w.repo_id,
+                w.alias,
+                r.canonical_origin AS existing_canonical_origin
+            FROM {{tables.workspaces}} w
+            LEFT JOIN {{tables.repos}} r ON w.repo_id = r.id
+            WHERE w.workspace_id = $1 AND w.project_id = $2
             """,
             UUID(identity.agent_id),
             UUID(identity.project_id),
@@ -285,6 +290,20 @@ async def init(
                 payload.workspace_path or None,
             )
         else:
+            existing_repo_id = existing.get("repo_id")
+            existing_canonical = existing.get("existing_canonical_origin")
+            if existing_repo_id is None or str(existing_repo_id) != repo_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "workspace_repo_mismatch: "
+                        f"alias '{identity.alias}' (workspace_id={identity.agent_id}) is already registered "
+                        f"for repo '{existing_canonical or existing_repo_id}'. "
+                        f"Cannot initialize the same agent for repo '{canonical_origin}'. "
+                        "Choose a different alias (new agent/worktree) or initialize from the original repo."
+                    ),
+                )
+
             await tx.execute(
                 """
                 UPDATE {{tables.workspaces}}
