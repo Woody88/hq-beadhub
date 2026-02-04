@@ -100,12 +100,19 @@ async def test_heartbeat_updates_presence(db_infra, init_workspace):
                 )
                 assert resp.status_code == 200, resp.text
 
-                # Check Redis presence
+                # Check beadhub Redis presence
                 presence_key = f"presence:{init['workspace_id']}"
                 presence = await redis.hgetall(presence_key)
-                assert presence, "Presence should be set after heartbeat"
+                assert presence, "Beadhub presence should be set after heartbeat"
                 assert presence["alias"] == "alice-agent"
                 assert presence["current_branch"] == "feature/test"
+
+                # Check aweb agent-level Redis presence
+                aweb_key = f"aweb:presence:{init['workspace_id']}"
+                aweb_presence = await redis.hgetall(aweb_key)
+                assert aweb_presence, "Aweb agent presence should be set after heartbeat"
+                assert aweb_presence["agent_id"] == init["workspace_id"]
+                assert aweb_presence["alias"] == "alice-agent"
     finally:
         await redis.flushdb()
         await redis.aclose()

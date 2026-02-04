@@ -19,6 +19,7 @@ def test_beadhub_only_imports_supported_aweb_surface() -> None:
         "aweb.bootstrap",
         "aweb.client",
         "aweb.messages_service",
+        "aweb.presence",
         "aweb.routes",
     )
 

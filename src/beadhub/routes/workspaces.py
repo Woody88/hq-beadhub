@@ -34,6 +34,7 @@ from ..roles import (
     is_valid_role,
     normalize_role,
 )
+from aweb.presence import update_agent_presence as update_aweb_agent_presence
 from .bdh import check_alias_collision, ensure_repo, upsert_workspace
 from .repos import canonicalize_git_url, extract_repo_name
 
@@ -640,6 +641,25 @@ async def heartbeat(
     except Exception as e:
         logger.warning(
             "Heartbeat SQL upsert succeeded but presence update failed",
+            extra={
+                "workspace_id": payload.workspace_id,
+                "project_id": str(project_id),
+                "error": str(e),
+            },
+        )
+
+    # Update aweb agent-level presence (best-effort, non-blocking).
+    try:
+        await update_aweb_agent_presence(
+            redis,
+            agent_id=payload.workspace_id,
+            alias=payload.alias,
+            project_id=str(project_id),
+            ttl_seconds=settings.presence_ttl_seconds,
+        )
+    except Exception as e:
+        logger.warning(
+            "Aweb agent presence update failed",
             extra={
                 "workspace_id": payload.workspace_id,
                 "project_id": str(project_id),
