@@ -141,7 +141,6 @@ class TestStandaloneLifespanCleanup:
     @pytest.mark.asyncio
     async def test_successful_initialization_sets_app_state(self):
         """When initialization succeeds, app.state should have both redis and db."""
-        import os
 
         from beadhub.api import _make_standalone_lifespan
 

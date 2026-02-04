@@ -12,6 +12,7 @@ from redis.asyncio import Redis
 
 from beadhub.auth import validate_workspace_id
 from beadhub.aweb_introspection import get_project_from_auth
+
 from ..db import DatabaseInfra, get_db_infra
 from ..events import stream_events_multi
 from ..presence import (
@@ -36,9 +37,7 @@ class _WorkspaceIDsCacheEntry:
 _WORKSPACE_IDS_CACHE: dict[tuple[int, str], _WorkspaceIDsCacheEntry] = {}
 
 
-def _get_workspace_ids_cache_key(
-    db_infra: DatabaseInfra, project_id: str
-) -> tuple[int, str]:
+def _get_workspace_ids_cache_key(db_infra: DatabaseInfra, project_id: str) -> tuple[int, str]:
     # Scope cache to the DatabaseInfra instance to avoid cross-DB bleed.
     return (id(db_infra), project_id)
 

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.asyncio import Redis
 
 from beadhub.auth import verify_workspace_access
-from beadhub.aweb_introspection import get_project_from_auth
+
 from ..db import DatabaseInfra, get_db_infra
 from ..presence import (
     get_workspace_ids_by_project_id,
@@ -23,8 +23,8 @@ from .escalations import (
     CreateEscalationRequest,
     CreateEscalationResponse,
     create_escalation,
-    get_escalation as http_get_escalation,
 )
+from .escalations import get_escalation as http_get_escalation
 from .status import status as http_status
 from .subscriptions import SubscribeRequest
 from .subscriptions import list_subscriptions as http_list_subscriptions
@@ -239,7 +239,12 @@ async def _tool_subscribe_to_bead(
         raise HTTPException(status_code=422, detail="workspace_id and bead_id are required")
     project_id = await verify_workspace_access(request, workspace_id, db_infra)
     alias = await _get_workspace_alias_or_403(db_infra, project_id, workspace_id)
-    payload_kwargs: dict[str, Any] = {"workspace_id": workspace_id, "alias": alias, "bead_id": bead_id, "repo": repo}
+    payload_kwargs: dict[str, Any] = {
+        "workspace_id": workspace_id,
+        "alias": alias,
+        "bead_id": bead_id,
+        "repo": repo,
+    }
     if isinstance(event_types, list):
         payload_kwargs["event_types"] = event_types
     payload = SubscribeRequest.model_validate(payload_kwargs)
@@ -287,7 +292,9 @@ async def _tool_unsubscribe(
     return response.model_dump()
 
 
-async def _get_workspace_alias_or_403(db_infra: DatabaseInfra, project_id: str, workspace_id: str) -> str:
+async def _get_workspace_alias_or_403(
+    db_infra: DatabaseInfra, project_id: str, workspace_id: str
+) -> str:
     server_db = db_infra.get_manager("server")
     row = await server_db.fetch_one(
         """
@@ -299,7 +306,9 @@ async def _get_workspace_alias_or_403(db_infra: DatabaseInfra, project_id: str, 
         UUID(project_id),
     )
     if not row:
-        raise HTTPException(status_code=403, detail="Workspace not found or does not belong to your project")
+        raise HTTPException(
+            status_code=403, detail="Workspace not found or does not belong to your project"
+        )
     return row["alias"]
 
 
@@ -324,4 +333,6 @@ async def _tool_get_escalation(
     escalation_id = str(args.get("escalation_id") or "").strip()
     if not escalation_id:
         raise HTTPException(status_code=422, detail="escalation_id is required")
-    return await http_get_escalation(escalation_id=escalation_id, request=request, db_infra=db_infra)
+    return await http_get_escalation(
+        escalation_id=escalation_id, request=request, db_infra=db_infra
+    )

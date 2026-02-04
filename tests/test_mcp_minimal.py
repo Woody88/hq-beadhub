@@ -63,4 +63,3 @@ async def test_mcp_register_agent_and_list_agents(db_infra, async_redis, init_wo
             assert listed.status_code == 200, listed.text
             agents = _extract_payload(listed)["agents"]
             assert any(a.get("alias") == "agent-one" for a in agents)
-

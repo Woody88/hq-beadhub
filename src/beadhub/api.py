@@ -4,22 +4,20 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.staticfiles import StaticFiles
-from redis.asyncio import Redis
-from redis.asyncio import from_url as async_redis_from_url
-
 from aweb.routes.auth import router as aweb_auth_router
 from aweb.routes.chat import router as aweb_chat_router
 from aweb.routes.messages import router as aweb_messages_router
 from aweb.routes.projects import router as aweb_projects_router
 from aweb.routes.reservations import router as aweb_reservations_router
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from redis.asyncio import Redis
+from redis.asyncio import from_url as async_redis_from_url
 
 from .config import get_settings
 from .db import DatabaseInfra
 from .db import db_infra as default_db_infra
 from .logging import configure_logging
-
 from .routes.agents import router as agents_router
 from .routes.bdh import router as bdh_router
 from .routes.beads import router as beads_router

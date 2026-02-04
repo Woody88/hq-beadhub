@@ -3,9 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from fastapi import HTTPException, Request
-
 from aweb.auth import parse_bearer_token, verify_bearer_token_details
+from fastapi import HTTPException, Request
 
 
 @dataclass(frozen=True)

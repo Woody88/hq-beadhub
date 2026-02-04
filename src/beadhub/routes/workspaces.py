@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import uuid as uuid_module
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 
 import asyncpg.exceptions
+from aweb.presence import update_agent_presence as update_aweb_agent_presence
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pgdbm.errors import QueryError
 from pydantic import BaseModel, Field, field_validator
@@ -17,6 +18,7 @@ from redis.asyncio import Redis
 from beadhub.auth import validate_workspace_id
 from beadhub.aweb_context import resolve_aweb_identity
 from beadhub.aweb_introspection import get_identity_from_auth, get_project_from_auth
+
 from ..beads_sync import is_valid_alias, is_valid_canonical_origin, is_valid_human_name
 from ..config import get_settings
 from ..db import DatabaseInfra, get_db_infra
@@ -34,7 +36,6 @@ from ..roles import (
     is_valid_role,
     normalize_role,
 )
-from aweb.presence import update_agent_presence as update_aweb_agent_presence
 from .bdh import check_alias_collision, ensure_repo, upsert_workspace
 from .repos import canonicalize_git_url, extract_repo_name
 
@@ -377,11 +378,17 @@ async def register_workspace(
         )
         if existing:
             if str(existing["project_id"]) != project_id:
-                raise HTTPException(status_code=409, detail="Workspace already registered in another project")
+                raise HTTPException(
+                    status_code=409, detail="Workspace already registered in another project"
+                )
             if existing["repo_id"] is not None and str(existing["repo_id"]) != repo_id:
-                raise HTTPException(status_code=409, detail="Workspace already registered for another repo")
+                raise HTTPException(
+                    status_code=409, detail="Workspace already registered for another repo"
+                )
             if existing["alias"] != alias:
-                raise HTTPException(status_code=409, detail="Workspace already registered with a different alias")
+                raise HTTPException(
+                    status_code=409, detail="Workspace already registered with a different alias"
+                )
 
             await tx.execute(
                 """
@@ -420,9 +427,13 @@ async def register_workspace(
                 )
             except (QueryError, asyncpg.exceptions.UniqueViolationError) as e:
                 # Alias uniqueness violation within the project.
-                if isinstance(e, QueryError) and not isinstance(e.__cause__, asyncpg.exceptions.UniqueViolationError):
+                if isinstance(e, QueryError) and not isinstance(
+                    e.__cause__, asyncpg.exceptions.UniqueViolationError
+                ):
                     raise
-                raise HTTPException(status_code=409, detail=f"Alias '{alias}' is already used in this project")
+                raise HTTPException(
+                    status_code=409, detail=f"Alias '{alias}' is already used in this project"
+                )
             created = True
 
     return RegisterWorkspaceResponse(

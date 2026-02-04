@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from beadhub.auth import validate_workspace_id
 from beadhub.aweb_introspection import get_identity_from_auth, get_project_from_auth
+
 from ..db import DatabaseInfra, get_db_infra
 from ..defaults import get_default_bundle
 

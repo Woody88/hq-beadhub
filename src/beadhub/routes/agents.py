@@ -3,15 +3,15 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
+from aweb.alias_allocator import suggest_next_name_prefix
+from aweb.auth import validate_project_slug
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from redis.asyncio import Redis
 
-from aweb.alias_allocator import suggest_next_name_prefix
-from aweb.auth import validate_project_slug
-
 from beadhub.auth import validate_workspace_id, verify_workspace_access
 from beadhub.aweb_introspection import get_project_from_auth
+
 from ..beads_sync import is_valid_alias
 from ..config import get_settings
 from ..db import DatabaseInfra, get_db_infra
@@ -111,6 +111,7 @@ class AgentView(BaseModel):
 class ListAgentsResponse(BaseModel):
     project_id: str
     agents: list[AgentView]
+
 
 class SuggestAliasPrefixRequest(BaseModel):
     project_slug: str = Field(..., min_length=1, max_length=256)

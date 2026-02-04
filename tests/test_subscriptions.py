@@ -73,6 +73,7 @@ async def test_subscribe_to_bead(db_infra, async_redis):
             assert data["bead_id"] == "beadhub-123"
             assert data["alias"] == "watcher-agent"
 
+
 @pytest.mark.asyncio
 async def test_subscribe_rejects_workspace_id_spoofing_within_project(db_infra, async_redis):
     """An agent API key must not be able to subscribe on behalf of another workspace in the same project."""

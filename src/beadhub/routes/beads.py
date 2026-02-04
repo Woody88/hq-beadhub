@@ -12,6 +12,7 @@ from redis.asyncio import Redis
 from beadhub.auth import validate_workspace_id
 from beadhub.aweb_context import resolve_aweb_identity
 from beadhub.aweb_introspection import get_project_from_auth
+
 from ..beads_sync import (
     DEFAULT_BRANCH,
     BeadsSyncResult,

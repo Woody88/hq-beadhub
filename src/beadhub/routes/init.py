@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
+from aweb.auth import validate_project_slug
+from aweb.bootstrap import BootstrapIdentityResult, bootstrap_identity
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from aweb.bootstrap import BootstrapIdentityResult, bootstrap_identity
-from aweb.auth import validate_project_slug
 from beadhub.beads_sync import is_valid_alias, is_valid_human_name
 from beadhub.db import DatabaseInfra, get_db_infra
 from beadhub.names import CLASSIC_NAMES
@@ -17,6 +17,7 @@ from beadhub.roles import ROLE_MAX_LENGTH, is_valid_role, normalize_role, role_t
 from beadhub.routes.repos import canonicalize_git_url, extract_repo_name
 
 router = APIRouter(prefix="/v1/init", tags=["init"])
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -81,7 +82,9 @@ class InitRequest(BaseModel):
     def _validate_hostname(cls, v: str) -> str:
         v = (v or "").strip()
         if v and ("\x00" in v or any(ord(c) < 32 for c in v)):
-            raise ValueError("hostname contains invalid characters (null bytes or control characters)")
+            raise ValueError(
+                "hostname contains invalid characters (null bytes or control characters)"
+            )
         return v
 
     @field_validator("workspace_path")
@@ -110,7 +113,9 @@ class InitResponse(BaseModel):
     workspace_created: bool = False
 
 
-async def _infer_project_slug_from_repo(db_infra: DatabaseInfra, *, canonical_origin: str) -> str | None:
+async def _infer_project_slug_from_repo(
+    db_infra: DatabaseInfra, *, canonical_origin: str
+) -> str | None:
     server_db = db_infra.get_manager("server")
     row = await server_db.fetch_one(
         """
@@ -200,7 +205,9 @@ async def init(
     if alias is None and canonical_origin is not None:
         from aweb.bootstrap import ensure_project
 
-        ensured = await ensure_project(db_infra, project_slug=project_slug, project_name=payload.project_name or project_slug)
+        ensured = await ensure_project(
+            db_infra, project_slug=project_slug, project_name=payload.project_name or project_slug
+        )
         prefix = await _suggest_name_prefix_for_project(db_infra, project_id=ensured.project_id)
         alias = f"{prefix}-{role_to_alias_prefix(payload.role)}"
 

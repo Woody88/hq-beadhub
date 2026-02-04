@@ -29,7 +29,9 @@ async def test_beadhub_agents_list_scoped_by_api_key(db_infra):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init_a = await client.post(
                     "/v1/init",
                     json={
@@ -87,7 +89,9 @@ async def test_beadhub_agents_list_accepts_valid_proxy_headers(monkeypatch, db_i
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await client.post(
                     "/v1/init",
                     json={
@@ -143,7 +147,9 @@ async def test_beadhub_agents_list_rejects_invalid_proxy_signature(monkeypatch, 
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await client.post(
                     "/v1/init",
                     json={
@@ -175,7 +181,9 @@ async def test_beadhub_agents_list_rejects_invalid_proxy_signature(monkeypatch, 
 
 
 @pytest.mark.asyncio
-async def test_beadhub_agents_list_does_not_trust_proxy_headers_without_secret(monkeypatch, db_infra):
+async def test_beadhub_agents_list_does_not_trust_proxy_headers_without_secret(
+    monkeypatch, db_infra
+):
     monkeypatch.delenv("BEADHUB_INTERNAL_AUTH_SECRET", raising=False)
     monkeypatch.delenv("SESSION_SECRET_KEY", raising=False)
 
@@ -189,7 +197,9 @@ async def test_beadhub_agents_list_does_not_trust_proxy_headers_without_secret(m
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 resp = await client.get(
                     "/v1/agents",
                     headers={

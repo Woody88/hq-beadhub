@@ -21,12 +21,16 @@ async def test_pgdbm_schema_migrations_module_names_are_stable(db_infra):
 
     server_names = {
         r["module_name"]
-        for r in await server_db.fetch_all("SELECT DISTINCT module_name FROM server.schema_migrations")
+        for r in await server_db.fetch_all(
+            "SELECT DISTINCT module_name FROM server.schema_migrations"
+        )
         if r.get("module_name")
     }
     beads_names = {
         r["module_name"]
-        for r in await beads_db.fetch_all("SELECT DISTINCT module_name FROM beads.schema_migrations")
+        for r in await beads_db.fetch_all(
+            "SELECT DISTINCT module_name FROM beads.schema_migrations"
+        )
         if r.get("module_name")
     }
     aweb_names = {

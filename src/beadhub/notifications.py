@@ -12,9 +12,9 @@ import json
 import logging
 import uuid
 from typing import TYPE_CHECKING, List
+from uuid import UUID
 
 from aweb.messages_service import deliver_message
-from uuid import UUID
 
 if TYPE_CHECKING:
     from .beads_sync import BeadStatusChange

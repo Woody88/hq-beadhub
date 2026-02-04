@@ -46,7 +46,9 @@ async def test_heartbeat_basic(db_infra, init_workspace):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"hb-{uuid.uuid4().hex[:8]}",
@@ -83,7 +85,9 @@ async def test_heartbeat_updates_presence(db_infra, init_workspace):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"hb-{uuid.uuid4().hex[:8]}",
@@ -131,7 +135,9 @@ async def test_heartbeat_wrong_project(db_infra, init_workspace):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 # Register workspace in project A
                 init_a = await init_workspace(
                     client,
@@ -178,7 +184,9 @@ async def test_heartbeat_alias_mismatch(db_infra, init_workspace):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"hb-{uuid.uuid4().hex[:8]}",
@@ -213,7 +221,9 @@ async def test_heartbeat_deleted_workspace(db_infra, init_workspace):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"hb-{uuid.uuid4().hex[:8]}",
@@ -255,7 +265,9 @@ async def test_heartbeat_updates_current_branch(db_infra, init_workspace):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"hb-{uuid.uuid4().hex[:8]}",
@@ -301,7 +313,9 @@ async def test_heartbeat_repo_mismatch(db_infra, init_workspace):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"hb-{uuid.uuid4().hex[:8]}",
@@ -337,7 +351,9 @@ async def test_heartbeat_deleted_repo(db_infra, init_workspace):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"hb-{uuid.uuid4().hex[:8]}",

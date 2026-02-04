@@ -1,5 +1,5 @@
-import logging
 import json
+import logging
 import uuid
 
 import pytest
@@ -8,7 +8,6 @@ from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 
 from beadhub.api import create_app
-
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,9 @@ async def test_bdh_command_requires_workspace_and_returns_claims(db_infra, init_
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"bdh-{uuid.uuid4().hex[:8]}",
@@ -85,7 +86,9 @@ async def test_bdh_sync_sets_and_clears_claims(db_infra, init_workspace):
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"bdh-{uuid.uuid4().hex[:8]}",
@@ -107,7 +110,9 @@ async def test_bdh_sync_sets_and_clears_claims(db_infra, init_workspace):
                         "repo_origin": TEST_REPO_ORIGIN,
                         "role": "agent",
                         "sync_mode": "full",
-                        "issues_jsonl": _jsonl({"id": "bd-1", "title": "t", "status": "in_progress"}),
+                        "issues_jsonl": _jsonl(
+                            {"id": "bd-1", "title": "t", "status": "in_progress"}
+                        ),
                         "command_line": "update bd-1 --status in_progress",
                     },
                 )
@@ -163,7 +168,9 @@ async def test_bdh_command_returns_410_when_workspace_deleted(db_infra, init_wor
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 init = await init_workspace(
                     client,
                     project_slug=f"bdh-{uuid.uuid4().hex[:8]}",

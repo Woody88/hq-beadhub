@@ -24,7 +24,14 @@ async def test_beadhub_get_project_from_auth_uses_local_verify_when_no_proxy_hea
 
     with patch(
         "beadhub.aweb_introspection.verify_bearer_token_details",
-        new=AsyncMock(return_value={"project_id": "proj-123", "api_key_id": "k-1", "agent_id": None, "user_id": None}),
+        new=AsyncMock(
+            return_value={
+                "project_id": "proj-123",
+                "api_key_id": "k-1",
+                "agent_id": None,
+                "user_id": None,
+            }
+        ),
     ) as mocked:
         got = await get_project_from_auth(request, db)
 
@@ -63,7 +70,9 @@ async def test_beadhub_get_project_from_auth_accepts_valid_proxy_headers(monkeyp
 
     with patch(
         "beadhub.aweb_introspection.verify_bearer_token_details",
-        new=AsyncMock(side_effect=AssertionError("verify_bearer_token_details should not be called")),
+        new=AsyncMock(
+            side_effect=AssertionError("verify_bearer_token_details should not be called")
+        ),
     ):
         got = await get_project_from_auth(request, db)
     assert got == str(uuid.UUID(project_id))
@@ -92,7 +101,14 @@ async def test_beadhub_get_project_from_auth_ignores_proxy_headers_when_no_secre
 
     with patch(
         "beadhub.aweb_introspection.verify_bearer_token_details",
-        new=AsyncMock(return_value={"project_id": "proj-123", "api_key_id": "k-1", "agent_id": None, "user_id": None}),
+        new=AsyncMock(
+            return_value={
+                "project_id": "proj-123",
+                "api_key_id": "k-1",
+                "agent_id": None,
+                "user_id": None,
+            }
+        ),
     ) as mocked:
         got = await get_project_from_auth(request, db)
     assert got == "proj-123"
@@ -124,7 +140,9 @@ async def test_beadhub_get_project_from_auth_rejects_invalid_proxy_signature(mon
 
     with patch(
         "beadhub.aweb_introspection.verify_bearer_token_details",
-        new=AsyncMock(side_effect=AssertionError("verify_bearer_token_details should not be called")),
+        new=AsyncMock(
+            side_effect=AssertionError("verify_bearer_token_details should not be called")
+        ),
     ):
         with pytest.raises(HTTPException) as exc_info:
             await get_project_from_auth(request, db)

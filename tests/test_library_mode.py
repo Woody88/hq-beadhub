@@ -6,10 +6,10 @@ import uuid
 
 import pytest
 from asgi_lifespan import LifespanManager
+from aweb.auth import hash_api_key
 from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 
-from aweb.auth import hash_api_key
 from beadhub.api import create_app
 from beadhub.db import DatabaseInfra
 
@@ -61,7 +61,10 @@ async def test_create_app_library_mode(db_infra, redis_url):
 
                 reg_resp = await client.post(
                     "/v1/workspaces/register",
-                    json={"repo_origin": "git@github.com:test/library-mode-test.git", "role": "agent"},
+                    json={
+                        "repo_origin": "git@github.com:test/library-mode-test.git",
+                        "role": "agent",
+                    },
                     headers=headers,
                 )
                 assert reg_resp.status_code == 200, reg_resp.text

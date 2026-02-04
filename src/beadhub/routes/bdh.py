@@ -22,9 +22,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from redis.asyncio import Redis
 
+from beadhub.auth import validate_workspace_id
 from beadhub.aweb_context import resolve_aweb_identity
 from beadhub.aweb_introspection import get_identity_from_auth
-from beadhub.auth import validate_workspace_id
 from beadhub.beads_sync import (
     DEFAULT_BRANCH,
     BeadsSyncResult,
@@ -36,10 +36,11 @@ from beadhub.beads_sync import (
     validate_issues_from_list,
 )
 from beadhub.routes.repos import canonicalize_git_url, extract_repo_name
+
 from ..db import DatabaseInfra, get_db_infra
-from ..presence import get_workspace_id_by_alias
 from ..jsonl import JSONLParseError, parse_jsonl
 from ..notifications import process_notification_outbox, record_notification_intents
+from ..presence import get_workspace_id_by_alias
 from ..redis_client import get_redis
 
 logger = logging.getLogger(__name__)
@@ -128,7 +129,9 @@ async def _touch_workspace_last_seen(
     )
 
 
-async def _list_beads_in_progress(db_infra: DatabaseInfra, *, project_id: str) -> list[dict[str, Any]]:
+async def _list_beads_in_progress(
+    db_infra: DatabaseInfra, *, project_id: str
+) -> list[dict[str, Any]]:
     server_db = db_infra.get_manager("server")
     rows = await server_db.fetch_all(
         """
@@ -526,8 +529,12 @@ async def sync(
         inserted = result.issues_added
         updated = result.issues_updated
     else:
-        if (payload.changed_issues is None or payload.changed_issues.strip() == "") and not payload.deleted_ids:
-            raise HTTPException(status_code=422, detail="incremental sync requires changes or deletions")
+        if (
+            payload.changed_issues is None or payload.changed_issues.strip() == ""
+        ) and not payload.deleted_ids:
+            raise HTTPException(
+                status_code=422, detail="incremental sync requires changes or deletions"
+            )
 
         if payload.changed_issues is not None and payload.changed_issues.strip():
             try:

@@ -148,7 +148,9 @@ async def test_create_escalation_rejects_workspace_id_spoofing_within_project(db
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 project_slug = f"escalation-spoof-{uuid.uuid4().hex[:6]}"
                 repo_origin = f"git@github.com:test/{project_slug}.git"
                 a = await init_workspace(

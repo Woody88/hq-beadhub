@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator
 import httpx
 import pytest
 import pytest_asyncio
+from aweb.db import DatabaseInfra as AwebDatabaseInfra
 from pgdbm.fixtures.conftest import *  # noqa: F401,F403
 from pgdbm.testing import AsyncTestDatabase, DatabaseTestConfig
 from redis import Redis
@@ -170,9 +171,8 @@ async def db_infra_uninitialized(monkeypatch) -> AsyncGenerator[DatabaseInfra, N
 
 
 @pytest_asyncio.fixture
-async def aweb_db_infra(monkeypatch) -> AsyncGenerator["aweb.db.DatabaseInfra", None]:
+async def aweb_db_infra(monkeypatch) -> AsyncGenerator[AwebDatabaseInfra, None]:
     """Provides an initialized aweb DatabaseInfra with a fresh test database."""
-    from aweb.db import DatabaseInfra as AwebDatabaseInfra
 
     test_config = DatabaseTestConfig.from_env()
     test_db = AsyncTestDatabase(test_config)

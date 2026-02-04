@@ -11,6 +11,7 @@ from redis.asyncio import Redis
 
 from beadhub.auth import validate_workspace_id
 from beadhub.aweb_introspection import get_identity_from_auth, get_project_from_auth
+
 from ..beads_sync import is_valid_alias
 from ..db import DatabaseInfra, get_db_infra
 from ..events import EscalationCreatedEvent, EscalationRespondedEvent, publish_event

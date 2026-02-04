@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from aweb.auth import DatabaseLike, parse_bearer_token, verify_bearer_token_details
 from fastapi import HTTPException, Request
 
-from aweb.auth import parse_bearer_token, verify_bearer_token_details
-
-from .db import DatabaseInfra
 from .internal_auth import parse_internal_auth_context
 
 
@@ -19,7 +17,7 @@ class AuthIdentity:
     auth_mode: str  # "proxy" or "bearer"
 
 
-async def get_identity_from_auth(request: Request, db: DatabaseInfra) -> AuthIdentity:
+async def get_identity_from_auth(request: Request, db: DatabaseLike) -> AuthIdentity:
     """Resolve the authenticated identity context for BeadHub requests.
 
     Priority order:
@@ -60,7 +58,7 @@ async def get_identity_from_auth(request: Request, db: DatabaseInfra) -> AuthIde
     )
 
 
-async def get_project_from_auth(request: Request, db: DatabaseInfra) -> str:
+async def get_project_from_auth(request: Request, db: DatabaseLike) -> str:
     """Resolve the authenticated project_id for BeadHub requests.
 
     Priority order:

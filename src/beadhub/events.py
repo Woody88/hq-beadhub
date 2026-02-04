@@ -381,7 +381,9 @@ async def _ensure_waiting_key_zset(redis: Redis, waiting_key: str, keep_ttl: boo
     try:
         key_type = await redis.type(waiting_key)
     except Exception:
-        logger.warning("Failed to read Redis key type for waiting_key=%s", waiting_key, exc_info=True)
+        logger.warning(
+            "Failed to read Redis key type for waiting_key=%s", waiting_key, exc_info=True
+        )
         return
 
     # redis-py returns bytes for TYPE.
@@ -398,20 +400,28 @@ async def _ensure_waiting_key_zset(redis: Redis, waiting_key: str, keep_ttl: boo
         try:
             ttl = await redis.ttl(waiting_key)
         except Exception:
-            logger.warning("Failed to read Redis TTL for waiting_key=%s", waiting_key, exc_info=True)
+            logger.warning(
+                "Failed to read Redis TTL for waiting_key=%s", waiting_key, exc_info=True
+            )
             ttl = None
 
     if key_type == "set":
         try:
             members = await redis.smembers(waiting_key)
         except Exception:
-            logger.warning("Failed to read Redis set members for waiting_key=%s", waiting_key, exc_info=True)
+            logger.warning(
+                "Failed to read Redis set members for waiting_key=%s", waiting_key, exc_info=True
+            )
             members = set()
 
         try:
             await redis.delete(waiting_key)
         except Exception:
-            logger.warning("Failed to delete Redis key waiting_key=%s for type migration", waiting_key, exc_info=True)
+            logger.warning(
+                "Failed to delete Redis key waiting_key=%s for type migration",
+                waiting_key,
+                exc_info=True,
+            )
             return
 
         mapping: dict[str, float] = {}
@@ -425,7 +435,11 @@ async def _ensure_waiting_key_zset(redis: Redis, waiting_key: str, keep_ttl: boo
             try:
                 await redis.zadd(waiting_key, mapping)
             except Exception:
-                logger.warning("Failed to write Redis zset waiting_key=%s for type migration", waiting_key, exc_info=True)
+                logger.warning(
+                    "Failed to write Redis zset waiting_key=%s for type migration",
+                    waiting_key,
+                    exc_info=True,
+                )
                 return
 
         if ttl is not None and ttl > 0:
@@ -443,7 +457,11 @@ async def _ensure_waiting_key_zset(redis: Redis, waiting_key: str, keep_ttl: boo
     try:
         await redis.delete(waiting_key)
     except Exception:
-        logger.warning("Failed to delete Redis key waiting_key=%s with unknown type", waiting_key, exc_info=True)
+        logger.warning(
+            "Failed to delete Redis key waiting_key=%s with unknown type",
+            waiting_key,
+            exc_info=True,
+        )
 
 
 async def is_workspace_waiting(

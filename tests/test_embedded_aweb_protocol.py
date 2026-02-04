@@ -28,7 +28,9 @@ async def test_embedded_aweb_mail_chat_reservations_roundtrip(db_infra, init_wor
     try:
         app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
         async with LifespanManager(app):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
                 project_slug = f"embedded-aweb-{uuid.uuid4().hex[:8]}"
 
                 ws1 = await init_workspace(
@@ -67,7 +69,9 @@ async def test_embedded_aweb_mail_chat_reservations_roundtrip(db_infra, init_wor
                     params={"unread_only": True, "limit": 50},
                 )
                 assert inbox.status_code == 200, inbox.text
-                assert any(m.get("message_id") == message_id for m in (inbox.json().get("messages") or []))
+                assert any(
+                    m.get("message_id") == message_id for m in (inbox.json().get("messages") or [])
+                )
 
                 # aweb chat
                 chat = await client.post(
@@ -87,7 +91,9 @@ async def test_embedded_aweb_mail_chat_reservations_roundtrip(db_infra, init_wor
                     headers=headers_2,
                 )
                 assert pending.status_code == 200, pending.text
-                assert any(p.get("session_id") == session_id for p in (pending.json().get("pending") or []))
+                assert any(
+                    p.get("session_id") == session_id for p in (pending.json().get("pending") or [])
+                )
 
                 # aweb reservations
                 resource_key = f"embedded-aweb:{uuid.uuid4().hex}"
