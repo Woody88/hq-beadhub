@@ -474,6 +474,15 @@ class WorkspaceHeartbeatRequest(BaseModel):
             )
         return v
 
+    @field_validator("repo_origin")
+    @classmethod
+    def validate_repo_origin_field(cls, v: str) -> str:
+        try:
+            canonicalize_git_url(v)
+        except ValueError as e:
+            raise ValueError(f"Invalid repo_origin: {e}")
+        return v
+
     @field_validator("role")
     @classmethod
     def validate_role_field(cls, v: Optional[str]) -> Optional[str]:
