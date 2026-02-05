@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useApi } from "../hooks/useApi"
-import { AlertTriangle, Clock, GitBranch, Tag, User, Copy, Check } from "lucide-react"
+import { AlertTriangle, Calendar, Clock, GitBranch, Tag, User, Copy, Check } from "lucide-react"
 import { Markdown } from "./Markdown"
 import {
   Sheet,
@@ -72,9 +72,13 @@ export function IssueDetailSheet({
     enabled: !!beadId,
   })
 
-  // Merge fetched issue (has description) with initial issue (has updated_at from list)
+  // Merge fetched issue (has description) with initial issue (has timestamps from list)
   const issue = fetchedIssue
-    ? { ...fetchedIssue, updated_at: fetchedIssue.updated_at ?? initialIssue?.updated_at }
+    ? {
+        ...fetchedIssue,
+        created_at: fetchedIssue.created_at ?? initialIssue?.created_at,
+        updated_at: fetchedIssue.updated_at ?? initialIssue?.updated_at,
+      }
     : initialIssue
 
   const status = issue ? statusStyles[issue.status] : null
@@ -228,6 +232,25 @@ export function IssueDetailSheet({
                   </p>
                 )}
               </section>
+
+              {/* Created */}
+              {issue.created_at && (
+                <>
+                  <Separator />
+                  <section>
+                    <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                      <Calendar className="h-3 w-3" />
+                      Created
+                    </h3>
+                    <p
+                      className="text-sm"
+                      title={new Date(issue.created_at).toLocaleString()}
+                    >
+                      {formatRelativeTime(issue.created_at)}
+                    </p>
+                  </section>
+                </>
+              )}
 
               {/* Last Updated */}
               {issue.updated_at && (
