@@ -1,3 +1,0 @@
-{"id":"bd-standalone","title":"Standalone issue","status":"open","priority":1,"issue_type":"task"}
-{"id":"bd-blocked-open","title":"Blocked by open cross-repo issue","status":"open","priority":2,"issue_type":"task","dependencies":[{"issue_id":"bd-blocked-open","depends_on_id":"cross-b:bd-backend","type":"blocks"}]}
-{"id":"bd-blocked-closed","title":"Blocked by closed cross-repo issue","status":"open","priority":3,"issue_type":"task","dependencies":[{"issue_id":"bd-blocked-closed","depends_on_id":"cross-b:bd-api-done","type":"blocks"}]}
