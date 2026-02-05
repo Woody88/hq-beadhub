@@ -71,6 +71,7 @@ export interface BeadIssue {
   labels: string[]
   blocked_by: Array<{ repo: string; branch: string; bead_id: string }>
   parent_id: { repo: string; branch: string; bead_id: string } | null
+  created_at?: string | null
   updated_at?: string | null
 }
 

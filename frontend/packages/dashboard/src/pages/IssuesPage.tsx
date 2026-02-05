@@ -12,6 +12,7 @@ import {
   Search,
   X,
   Clock,
+  Calendar,
   Copy,
   Check,
 } from "lucide-react"
@@ -209,6 +210,15 @@ function IssueCard({
                   <span>·</span>
                   <span className="text-warning">
                     blocked by {issue.blocked_by.length}
+                  </span>
+                </>
+              )}
+              {issue.created_at && (
+                <>
+                  <span>·</span>
+                  <span className="flex items-center gap-1" title={new Date(issue.created_at).toLocaleString()}>
+                    <Calendar className="h-3 w-3" />
+                    {formatRelativeTime(issue.created_at)}
                   </span>
                 </>
               )}
