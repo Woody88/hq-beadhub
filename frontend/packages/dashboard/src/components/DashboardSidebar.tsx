@@ -16,7 +16,7 @@ export function DashboardSidebar({
       {!hideLogo && (
         <div className={`flex h-14 items-center px-4 border-b ${showCloseButton ? 'justify-between' : 'gap-2'}`}>
           <Link to="/" className="flex items-center gap-2" onClick={onNavClick}>
-            <span className="text-xl leading-none text-primary" aria-hidden="true">&#x2B55;</span>
+            <svg viewBox="0 0 100 100" className="h-5 w-5 text-primary" aria-hidden="true"><circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="10"/><circle cx="50" cy="50" r="12" fill="currentColor"/></svg>
             <span className="font-semibold tracking-tight">BeadHub</span>
           </Link>
           {showCloseButton && (
