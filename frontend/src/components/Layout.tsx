@@ -238,7 +238,7 @@ export function Layout() {
         {/* Logo */}
         <div className="flex h-14 items-center gap-2 px-4 border-b">
           <Link to="/" className="flex items-center gap-2">
-            <span className="text-xl leading-none text-primary" aria-hidden="true">&#x2B55;</span>
+            <svg viewBox="0 0 100 100" className="h-5 w-5 text-primary" aria-hidden="true"><circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="10"/><circle cx="50" cy="50" r="12" fill="currentColor"/></svg>
             <span className="font-semibold tracking-tight">BeadHub</span>
           </Link>
         </div>
@@ -316,7 +316,7 @@ export function Layout() {
         {/* Logo + Close */}
         <div className="flex h-14 items-center justify-between px-4 border-b">
           <Link to="/" className="flex items-center gap-2" onClick={() => setSidebarOpen(false)}>
-            <span className="text-xl leading-none text-primary" aria-hidden="true">&#x2B55;</span>
+            <svg viewBox="0 0 100 100" className="h-5 w-5 text-primary" aria-hidden="true"><circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="10"/><circle cx="50" cy="50" r="12" fill="currentColor"/></svg>
             <span className="font-semibold tracking-tight">BeadHub</span>
           </Link>
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)} aria-label="Close navigation">
