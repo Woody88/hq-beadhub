@@ -755,8 +755,9 @@ async def delete_workspace(
         raise HTTPException(status_code=422, detail=str(e))
 
     identity = await get_identity_from_auth(request, db)
-    if identity.agent_id is not None and identity.agent_id != validated_id:
-        raise HTTPException(status_code=403, detail="workspace_id does not match API key identity")
+    # Note: No workspace identity check here - any workspace in the project can
+    # delete any other workspace. This enables peer cleanup of stale workspaces
+    # (whose directories no longer exist and thus can't delete themselves).
     project_id = identity.project_id
 
     server_db = db.get_manager("server")
