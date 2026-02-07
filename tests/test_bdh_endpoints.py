@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 
 from beadhub.api import create_app
+from beadhub.routes.bdh import _parse_command_line
 
 logger = logging.getLogger(__name__)
 
@@ -316,3 +317,123 @@ async def test_bdh_command_rejects_claim_when_already_claimed(db_infra, init_wor
     finally:
         await redis.flushdb()
         await redis.aclose()
+
+
+@pytest.mark.asyncio
+async def test_sync_rejects_claim_when_already_claimed_by_another(db_infra, init_workspace):
+    """Sync should skip the claim upsert when another workspace already holds it."""
+    redis = await Redis.from_url(TEST_REDIS_URL, decode_responses=True)
+    try:
+        await redis.ping()
+    except Exception:
+        pytest.skip("Redis is not available")
+    await redis.flushdb()
+
+    try:
+        app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
+        async with LifespanManager(app):
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                slug = f"bdh-{uuid.uuid4().hex[:8]}"
+
+                alice = await init_workspace(
+                    client,
+                    project_slug=slug,
+                    repo_origin=TEST_REPO_ORIGIN,
+                    alias="alice-dev",
+                    human_name="Alice",
+                    role="developer",
+                )
+                bob = await init_workspace(
+                    client,
+                    project_slug=slug,
+                    repo_origin=TEST_REPO_ORIGIN,
+                    alias="bob-dev",
+                    human_name="Bob",
+                    role="developer",
+                )
+
+                # Alice claims bd-1 via sync
+                resp = await client.post(
+                    "/v1/bdh/sync",
+                    headers=auth_headers(alice["api_key"]),
+                    json={
+                        "workspace_id": alice["workspace_id"],
+                        "alias": alice["alias"],
+                        "human_name": "Alice",
+                        "repo_origin": TEST_REPO_ORIGIN,
+                        "role": "developer",
+                        "sync_mode": "full",
+                        "issues_jsonl": _jsonl(
+                            {"id": "bd-1", "title": "Fix bug", "status": "in_progress"}
+                        ),
+                        "command_line": "update bd-1 --status in_progress",
+                    },
+                )
+                assert resp.status_code == 200, resp.text
+                assert resp.json().get("claim_rejected") is not True
+
+                # Bob tries to claim bd-1 via sync — issues should sync but claim should be skipped
+                resp = await client.post(
+                    "/v1/bdh/sync",
+                    headers=auth_headers(bob["api_key"]),
+                    json={
+                        "workspace_id": bob["workspace_id"],
+                        "alias": bob["alias"],
+                        "human_name": "Bob",
+                        "repo_origin": TEST_REPO_ORIGIN,
+                        "role": "developer",
+                        "sync_mode": "full",
+                        "issues_jsonl": _jsonl(
+                            {"id": "bd-1", "title": "Fix bug", "status": "in_progress"}
+                        ),
+                        "command_line": "update bd-1 --status in_progress",
+                    },
+                )
+                assert resp.status_code == 200, resp.text
+                data = resp.json()
+                assert data["synced"] is True  # Issues still sync
+                assert data["claim_rejected"] is True
+                assert "alice-dev" in data["claim_rejected_reason"]
+
+                # Only Alice's claim should exist
+                claims = await client.get("/v1/claims", headers=auth_headers(alice["api_key"]))
+                assert claims.status_code == 200
+                claim_list = claims.json()["claims"]
+                assert len(claim_list) == 1
+                assert claim_list[0]["alias"] == "alice-dev"
+    finally:
+        await redis.flushdb()
+        await redis.aclose()
+
+
+class TestParseCommandLine:
+    def test_update_in_progress(self):
+        cmd, bead_id, status = _parse_command_line("update bd-1 --status in_progress")
+        assert (cmd, bead_id, status) == ("update", "bd-1", "in_progress")
+
+    def test_update_with_equals(self):
+        cmd, bead_id, status = _parse_command_line("update bd-1 --status=in_progress")
+        assert (cmd, bead_id, status) == ("update", "bd-1", "in_progress")
+
+    def test_close(self):
+        cmd, bead_id, status = _parse_command_line("close bd-42")
+        assert (cmd, bead_id, status) == ("close", "bd-42", None)
+
+    def test_ready(self):
+        cmd, bead_id, status = _parse_command_line("ready")
+        assert (cmd, bead_id, status) == ("ready", None, None)
+
+    def test_empty(self):
+        cmd, bead_id, status = _parse_command_line("")
+        assert (cmd, bead_id, status) == (None, None, None)
+
+    def test_bead_id_starting_with_dashes_ignored(self):
+        """update --status in_progress (no bead_id) should not set bead_id to '--status'."""
+        cmd, bead_id, status = _parse_command_line("update --status in_progress")
+        assert bead_id is None
+
+    def test_delete(self):
+        cmd, bead_id, status = _parse_command_line("delete bd-5")
+        assert (cmd, bead_id, status) == ("delete", "bd-5", None)

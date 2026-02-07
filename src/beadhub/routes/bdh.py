@@ -66,7 +66,9 @@ def _parse_command_line(command_line: str) -> tuple[Optional[str], Optional[str]
     bead_id: Optional[str] = None
     status: Optional[str] = None
     if cmd in ("update", "close", "delete", "reopen") and len(parts) >= 2:
-        bead_id = parts[1].strip()
+        candidate = parts[1].strip()
+        if not candidate.startswith("--"):
+            bead_id = candidate
 
     if cmd == "update":
         # Handle: --status in_progress OR --status=in_progress
@@ -231,7 +233,10 @@ async def _upsert_claim(
     alias: str,
     human_name: str,
     bead_id: str,
-) -> None:
+) -> Optional[dict[str, Any]]:
+    """Attempt to claim a bead. Returns None on success, or the conflicting
+    claim dict (with alias, human_name, workspace_id) if already held by
+    another workspace."""
     server_db = db_infra.get_manager("server")
 
     # Resolve apex (root parent) for this bead
@@ -239,32 +244,51 @@ async def _upsert_claim(
         db_infra, project_id, bead_id
     )
 
-    await server_db.execute(
-        """
-        INSERT INTO {{tables.bead_claims}} (
-            project_id, workspace_id, alias, human_name, bead_id,
-            apex_bead_id, apex_repo_name, apex_branch, claimed_at
+    async with server_db.transaction() as tx:
+        # Check if another workspace already holds this claim.
+        existing = await tx.fetch_one(
+            """
+            SELECT workspace_id, alias, human_name
+            FROM {{tables.bead_claims}}
+            WHERE project_id = $1 AND bead_id = $2 AND workspace_id != $3
+            """,
+            UUID(project_id),
+            bead_id,
+            UUID(workspace_id),
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (project_id, bead_id, workspace_id)
-        DO UPDATE SET
-            alias = EXCLUDED.alias,
-            human_name = EXCLUDED.human_name,
-            apex_bead_id = EXCLUDED.apex_bead_id,
-            apex_repo_name = EXCLUDED.apex_repo_name,
-            apex_branch = EXCLUDED.apex_branch,
-            claimed_at = EXCLUDED.claimed_at
-        """,
-        UUID(project_id),
-        UUID(workspace_id),
-        alias,
-        human_name,
-        bead_id,
-        apex_bead_id,
-        apex_repo_name,
-        apex_branch,
-        _now(),
-    )
+        if existing:
+            return {
+                "workspace_id": str(existing["workspace_id"]),
+                "alias": existing["alias"],
+                "human_name": existing["human_name"],
+            }
+
+        await tx.execute(
+            """
+            INSERT INTO {{tables.bead_claims}} (
+                project_id, workspace_id, alias, human_name, bead_id,
+                apex_bead_id, apex_repo_name, apex_branch, claimed_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (project_id, bead_id, workspace_id)
+            DO UPDATE SET
+                alias = EXCLUDED.alias,
+                human_name = EXCLUDED.human_name,
+                apex_bead_id = EXCLUDED.apex_bead_id,
+                apex_repo_name = EXCLUDED.apex_repo_name,
+                apex_branch = EXCLUDED.apex_branch,
+                claimed_at = EXCLUDED.claimed_at
+            """,
+            UUID(project_id),
+            UUID(workspace_id),
+            alias,
+            human_name,
+            bead_id,
+            apex_bead_id,
+            apex_repo_name,
+            apex_branch,
+            _now(),
+        )
 
     # Update workspace focus_apex fields for team status display
     if apex_bead_id:
@@ -284,6 +308,8 @@ async def _upsert_claim(
             UUID(project_id),
             UUID(workspace_id),
         )
+
+    return None
 
 
 async def _delete_claim(
@@ -612,6 +638,8 @@ class SyncResponse(BaseModel):
     context: CommandContext | None = None
     stats: SyncStats | None = None
     sync_protocol_version: int = 1
+    claim_rejected: bool = False
+    claim_rejected_reason: str = ""
 
 
 @router.post("/sync", response_model=SyncResponse)
@@ -712,10 +740,11 @@ async def sync(
             )
 
     # Update claims based on the bd command that succeeded (best-effort).
+    claim_conflict: Optional[dict[str, Any]] = None
     cmd, bead_id, status = _parse_command_line(payload.command_line or "")
     if bead_id:
         if cmd == "update" and status == "in_progress":
-            await _upsert_claim(
+            claim_conflict = await _upsert_claim(
                 db_infra,
                 project_id=project_id,
                 workspace_id=payload.workspace_id,
@@ -794,9 +823,16 @@ async def sync(
     )
     issues_count = int(count_row["c"]) if count_row else 0
 
-    return SyncResponse(
+    resp = SyncResponse(
         synced=True,
         issues_count=issues_count,
         stats=SyncStats(received=received, inserted=inserted, updated=updated, deleted=deleted),
         sync_protocol_version=1,
     )
+    if claim_conflict:
+        resp.claim_rejected = True
+        resp.claim_rejected_reason = (
+            f"{bead_id} is being worked on by"
+            f" {claim_conflict['alias']} ({claim_conflict['human_name']})"
+        )
+    return resp
