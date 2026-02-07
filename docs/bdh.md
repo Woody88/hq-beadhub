@@ -43,9 +43,9 @@ workspace_id: "a1b2c3d4-5678-90ab-cdef-1234567890ab"
 beadhub_url: "http://localhost:8000"
 project_slug: "my-project"
 repo_origin: "git@github.com:org/repo.git"
-alias: "alice-implementer"
+alias: "alice-developer"
 human_name: "Juan"
-role: "implementer"
+role: "developer"
 ```
 
 | Field | Description |
@@ -74,7 +74,7 @@ Escape hatch for scripts/CI:
 Initialize a workspace and create the `.beadhub` + `.aw/context` files:
 
 ```
-$ bdh :init --project my-project --alias alice-implementer --human "Juan"
+$ bdh :init --project my-project --alias alice-developer --human "Juan"
 ```
 
 Options:
@@ -135,7 +135,7 @@ Show the active project policy and your role's playbook:
 → bdh :policy
 
 Policy: v2 (updated 6 hours ago)
-Role: implementer
+Role: developer
 
 Beads workflow:
   ...
@@ -146,7 +146,7 @@ Global invariants:
   - Chat for synchronous coordination
   ...
 
-Role playbook (implementer):
+Role playbook (developer):
   ...
 ```
 

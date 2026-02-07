@@ -40,7 +40,7 @@ Dashboard:
 
 ## See It In Action
 
-Here's what multi-agent coordination looks like. You have three agents: a coordinator and two implementers.
+Here's what multi-agent coordination looks like. You have three agents: a coordinator and two developers.
 
 > **Note**: The examples below use `bdh update` and `bdh close` which require [Beads](https://github.com/steveyegge/beads) for issue tracking. Install beads first, then run `bd init` in your repo.
 
