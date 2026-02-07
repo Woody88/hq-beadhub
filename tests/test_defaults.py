@@ -218,12 +218,12 @@ title: Coordinator
 Own the project outcome.
 """
         )
-        (roles_dir / "implementer.md").write_text(
+        (roles_dir / "developer.md").write_text(
             """---
-id: implementer
-title: Implementer
+id: developer
+title: Developer
 ---
-## Implementer
+## Developer
 Write code and tests.
 """
         )
@@ -239,7 +239,7 @@ Write code and tests.
         # Check roles
         assert len(bundle["roles"]) == 2
         assert "coordinator" in bundle["roles"]
-        assert "implementer" in bundle["roles"]
+        assert "developer" in bundle["roles"]
         assert bundle["roles"]["coordinator"]["title"] == "Coordinator"
 
         # Check adapters (empty by default)
@@ -317,7 +317,7 @@ class TestDefaultBundleIntegration:
 
         # Should have roles
         assert "coordinator" in bundle["roles"]
-        assert "implementer" in bundle["roles"]
+        assert "developer" in bundle["roles"]
         assert "reviewer" in bundle["roles"]
 
         # Each role should have title and playbook_md

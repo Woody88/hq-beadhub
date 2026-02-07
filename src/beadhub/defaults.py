@@ -12,7 +12,7 @@ File structure:
     │   └── ...
     └── roles/
         ├── coordinator.md
-        ├── implementer.md
+        ├── developer.md
         └── reviewer.md
 
 Each file has YAML frontmatter:

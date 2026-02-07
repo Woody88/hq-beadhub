@@ -386,7 +386,7 @@ async def test_get_active_policy_bootstrap(db_infra):
     assert policy.version == 1
     assert len(policy.bundle.invariants) == len(DEFAULT_POLICY_BUNDLE["invariants"])
     assert "coordinator" in policy.bundle.roles
-    assert "implementer" in policy.bundle.roles
+    assert "developer" in policy.bundle.roles
     assert "reviewer" in policy.bundle.roles
 
     # Verify it's now set as active
@@ -540,7 +540,7 @@ def test_get_active_policy_endpoint_happy_path(beadhub_server):
     assert "invariants" in data
     assert "roles" in data
     assert "coordinator" in data["roles"]
-    assert "implementer" in data["roles"]
+    assert "developer" in data["roles"]
     assert "reviewer" in data["roles"]
 
     # Check ETag header is present
@@ -1054,7 +1054,7 @@ def test_reset_policy_to_default(beadhub_server):
     active_data = active_resp.json()
     assert active_data["policy_id"] == reset_data["active_policy_id"]
     assert "coordinator" in active_data["roles"]
-    assert "implementer" in active_data["roles"]
+    assert "developer" in active_data["roles"]
     assert "reviewer" in active_data["roles"]
 
 

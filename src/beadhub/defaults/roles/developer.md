@@ -1,9 +1,9 @@
 ---
-id: implementer
-title: Implementer
+id: developer
+title: Developer
 ---
 
-## Implementer Role
+## Developer Role
 
 You write code and implement features.
 
