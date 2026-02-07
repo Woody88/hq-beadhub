@@ -536,6 +536,20 @@ async def command(
     )
 
     beads_in_progress = await _list_beads_in_progress(db_infra, project_id=project_id)
+
+    # Check if this is a claim command and the bead is already claimed by another workspace.
+    cmd, bead_id, status = _parse_command_line(payload.command_line or "")
+    if cmd == "update" and status == "in_progress" and bead_id:
+        for claim in beads_in_progress:
+            if claim["bead_id"] == bead_id and claim["workspace_id"] != payload.workspace_id:
+                return CommandResponse(
+                    approved=False,
+                    reason=f"{bead_id} is being worked on by {claim['alias']} ({claim['human_name']})",
+                    context=CommandContext(
+                        messages_waiting=0, beads_in_progress=beads_in_progress
+                    ),
+                )
+
     return CommandResponse(
         approved=True,
         context=CommandContext(messages_waiting=0, beads_in_progress=beads_in_progress),

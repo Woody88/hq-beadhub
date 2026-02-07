@@ -207,3 +207,112 @@ async def test_bdh_command_returns_410_when_workspace_deleted(db_infra, init_wor
     finally:
         await redis.flushdb()
         await redis.aclose()
+
+
+@pytest.mark.asyncio
+async def test_bdh_command_rejects_claim_when_already_claimed(db_infra, init_workspace):
+    """Command should return approved=False when another workspace already claims the bead."""
+    redis = await Redis.from_url(TEST_REDIS_URL, decode_responses=True)
+    try:
+        await redis.ping()
+    except Exception:
+        pytest.skip("Redis is not available")
+    await redis.flushdb()
+
+    try:
+        app = create_app(db_infra=db_infra, redis=redis, serve_frontend=False)
+        async with LifespanManager(app):
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                slug = f"bdh-{uuid.uuid4().hex[:8]}"
+
+                # Create two workspaces in the same project
+                alice = await init_workspace(
+                    client,
+                    project_slug=slug,
+                    repo_origin=TEST_REPO_ORIGIN,
+                    alias="alice-dev",
+                    human_name="Alice",
+                    role="developer",
+                )
+                bob = await init_workspace(
+                    client,
+                    project_slug=slug,
+                    repo_origin=TEST_REPO_ORIGIN,
+                    alias="bob-dev",
+                    human_name="Bob",
+                    role="developer",
+                )
+
+                # Alice claims bd-1 via sync
+                resp = await client.post(
+                    "/v1/bdh/sync",
+                    headers=auth_headers(alice["api_key"]),
+                    json={
+                        "workspace_id": alice["workspace_id"],
+                        "alias": alice["alias"],
+                        "human_name": "Alice",
+                        "repo_origin": TEST_REPO_ORIGIN,
+                        "role": "developer",
+                        "sync_mode": "full",
+                        "issues_jsonl": _jsonl(
+                            {"id": "bd-1", "title": "Fix bug", "status": "in_progress"}
+                        ),
+                        "command_line": "update bd-1 --status in_progress",
+                    },
+                )
+                assert resp.status_code == 200, resp.text
+
+                # Bob tries to claim the same bead via command
+                resp = await client.post(
+                    "/v1/bdh/command",
+                    headers=auth_headers(bob["api_key"]),
+                    json={
+                        "workspace_id": bob["workspace_id"],
+                        "alias": bob["alias"],
+                        "human_name": "Bob",
+                        "repo_origin": TEST_REPO_ORIGIN,
+                        "role": "developer",
+                        "command_line": "update bd-1 --status in_progress",
+                    },
+                )
+                assert resp.status_code == 200, resp.text
+                data = resp.json()
+                assert data["approved"] is False
+                assert "alice-dev" in data["reason"]
+
+                # Bob's non-claim command should still be approved
+                resp = await client.post(
+                    "/v1/bdh/command",
+                    headers=auth_headers(bob["api_key"]),
+                    json={
+                        "workspace_id": bob["workspace_id"],
+                        "alias": bob["alias"],
+                        "human_name": "Bob",
+                        "repo_origin": TEST_REPO_ORIGIN,
+                        "role": "developer",
+                        "command_line": "ready",
+                    },
+                )
+                assert resp.status_code == 200, resp.text
+                assert resp.json()["approved"] is True
+
+                # Alice claiming her own bead again should be approved
+                resp = await client.post(
+                    "/v1/bdh/command",
+                    headers=auth_headers(alice["api_key"]),
+                    json={
+                        "workspace_id": alice["workspace_id"],
+                        "alias": alice["alias"],
+                        "human_name": "Alice",
+                        "repo_origin": TEST_REPO_ORIGIN,
+                        "role": "developer",
+                        "command_line": "update bd-1 --status in_progress",
+                    },
+                )
+                assert resp.status_code == 200, resp.text
+                assert resp.json()["approved"] is True
+    finally:
+        await redis.flushdb()
+        await redis.aclose()
