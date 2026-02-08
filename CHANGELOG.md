@@ -6,6 +6,28 @@ This project follows a pragmatic, OSS-friendly changelog format (similar to Keep
 
 ## Unreleased
 
+## 0.2.0 — 2026-02-08
+
+### Added
+- Claim enforcement: reject commands when bead already claimed by another workspace
+- Workspace alias suggestions query aweb.agents for used aliases
+
+### Changed
+- Chat commands renamed: `chat send` → `chat send-and-wait` / `chat send-and-leave`, `chat hang-on` → `chat extend-wait`
+- Dashboard palette updated to match design spec
+- "Implementer" role renamed to "developer"
+- Bumped aweb dependency to 0.1.3
+
+### Fixed
+- Race condition in claim enforcement
+- Workspace focus fields populated when claiming beads
+- Workspace identity validated against API key
+- Peer cleanup of stale workspaces
+- Beads API responses include created_at and updated_at
+
+### Removed
+- Dead Redis chat connection tracking code from events.py (now handled by aweb)
+
 ## 0.1.0 — 2026-01-06
 
 Initial open-source release.
