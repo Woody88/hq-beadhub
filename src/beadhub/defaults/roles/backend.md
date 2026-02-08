@@ -51,5 +51,5 @@ bdh ready                # Find available work
 
 **When blocked:**
 ```bash
-bdh :aweb chat send coordinator "Need clarification on API contract" --start-conversation
+bdh :aweb chat send-and-wait coordinator "Need clarification on API contract" --start-conversation
 ```

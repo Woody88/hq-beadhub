@@ -80,10 +80,10 @@ Use **chat** for quick coordination (e.g., asking to take a claimed bead):
 
 ```bash
 cd /tmp/demo-repo-alice
-bdh :aweb chat send dev-01 'Can I take the login bug?' --wait 10
+bdh :aweb chat send-and-wait dev-01 'Can I take the login bug?' --wait 10
 
 cd /tmp/demo-repo
-bdh :aweb chat send alice "Yes — go for it."
+bdh :aweb chat send-and-wait alice "Yes — go for it."
 ```
 
 Use **mail** for async handoffs when work is done:

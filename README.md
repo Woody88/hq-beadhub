@@ -58,7 +58,7 @@ ONLINE
 
 ### 2. Coordinator assigns work via chat
 
-**coord-main** runs `bdh :aweb chat send bob "Can you handle the API endpoints?" --wait 300`:
+**coord-main** runs `bdh :aweb chat send-and-wait bob "Can you handle the API endpoints?" --wait 300`:
 
 ```
 Sent chat to bob (session_id=...)
@@ -74,7 +74,7 @@ CHATS: 1 unread conversation(s)
 - coord-main (unread: 1)
 ```
 
-**bob-backend** runs `bdh :aweb chat send coord-main "Got it, I'll take the API work"`:
+**bob-backend** runs `bdh :aweb chat send-and-wait coord-main "Got it, I'll take the API work"`:
 
 ```
 coord-main: Can you handle the API endpoints?
@@ -141,9 +141,9 @@ bdh close bd-42                        # Complete work
 Use chat when you need an answer to proceed. The sender waits.
 
 ```bash
-bdh :aweb chat send alice "Quick question..." --wait 300  # Send, wait up to 5 min
-bdh :aweb chat pending                                     # Check pending chats
-bdh :aweb chat send alice "Here's the answer"              # Reply
+bdh :aweb chat send-and-wait alice "Quick question..." --wait 300  # Send, wait up to 5 min
+bdh :aweb chat pending                                              # Check pending chats
+bdh :aweb chat send-and-wait alice "Here's the answer"              # Reply
 ```
 
 ### Mail (async)

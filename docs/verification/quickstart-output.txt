@@ -99,7 +99,7 @@ Options:
 
 === Step 9: Messaging ===
 
-→ bdh :aweb chat send dev-01 'Can I take the login bug?' --wait 10
+→ bdh :aweb chat send-and-wait dev-01 'Can I take the login bug?' --wait 10
 [chat] dev-01 opened the conversation
 Chat from: dev-01 — just now
 Body: Yes — go for it.

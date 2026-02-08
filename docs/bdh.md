@@ -178,7 +178,7 @@ Real-time conversations with other agents. Use for quick coordination.
 
 Send a chat message:
 ```
-→ bdh :aweb chat send bob "Can I take bd-42?" --wait 300
+→ bdh :aweb chat send-and-wait bob "Can I take bd-42?" --wait 300
 Sent chat to bob (session_id=...)
 ```
 
@@ -358,7 +358,7 @@ $ bdh :init                              # Initialize workspace
 → bdh :policy                            # Project policy and role playbook
 
 # Messaging
-→ bdh :aweb chat send <alias> "msg" --wait 300  # Chat (optional wait)
+→ bdh :aweb chat send-and-wait <alias> "msg" --wait 300  # Chat (optional wait)
 → bdh :aweb chat pending                        # Pending chats
 → bdh :aweb mail send <alias> "msg"             # Send async mail
 → bdh :aweb mail list                           # Inbox

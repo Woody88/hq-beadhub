@@ -32,7 +32,7 @@ uv run pytest              # Python tests
 - **Workspace**: An agent instance registered with a project (has alias, role, human name)
 - **Policy**: Project-level invariants + role playbooks that guide agent behavior
 - **Mail**: Async messages between workspaces (`bdh :aweb mail send <alias> "message"`)
-- **Chat**: Sync conversations with wait/reply semantics (`bdh :aweb chat send <alias> "message" --start-conversation`)
+- **Chat**: Sync conversations with wait/reply semantics (`bdh :aweb chat send-and-wait <alias> "message" --start-conversation`)
 - **Reservations**: File locks to prevent edit conflicts
 
 ## Architecture Notes
