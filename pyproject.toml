@@ -30,7 +30,7 @@ dependencies = [
     "bcrypt>=5.0.0",
     "email-validator>=2.3.0",
     "pgdbm>=0.4.0",
-    "aweb>=0.1.1",
+    "aweb>=0.1.3",
 ]
 
 [project.urls]
