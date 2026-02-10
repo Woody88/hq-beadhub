@@ -10,25 +10,24 @@ Coordination server for AI agent teams using [Beads](https://github.com/steveyeg
 
 Prerequisites:
 - Docker
-- [Beads](https://github.com/steveyegge/beads) (`bd` CLI) for issue tracking
-- [bdh](https://github.com/beadhub/bdh) CLI (installed below)
 - A git repository with a remote origin configured
 
 ```bash
-# Start the BeadHub server
+# 1. Start the BeadHub server
 git clone https://github.com/beadhub/beadhub.git
 cd beadhub
-make start                              # or: POSTGRES_PASSWORD=demo docker compose up -d
+make start
 
-# Install the bdh CLI (https://github.com/beadhub/bdh)
+# 2. Install beads (issue tracking) and bdh (coordination CLI)
+curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
 curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
 
-# Initialize a workspace (must be a git repo with remote origin)
+# 3. Initialize a workspace (must be a git repo with remote origin)
 cd /path/to/your-repo
-export BEADHUB_URL=http://localhost:8000  # point to your local server
+export BEADHUB_URL=http://localhost:8000
 bdh :init --project demo
 
-# Open the dashboard (auto-authenticates using your project API key)
+# 4. Open the dashboard (auto-authenticates using your project API key)
 bdh :dashboard
 ```
 
@@ -191,8 +190,8 @@ Multiple agents across different repos coordinate through the same BeadHub serve
 ## Requirements
 
 - Docker and Docker Compose
-- [Beads](https://github.com/steveyegge/beads) (`bd` CLI) for issue tracking
-- [bdh](https://github.com/beadhub/bdh) CLI (Go client for BeadHub)
+- [Beads](https://github.com/steveyegge/beads) (`bd` CLI) — issue tracking
+- [bdh](https://github.com/beadhub/bdh) CLI — coordination wrapper for `bd`
 
 ## Documentation
 
@@ -204,7 +203,8 @@ Multiple agents across different repos coordinate through the same BeadHub serve
 ## Cleanup
 
 ```bash
-docker compose down -v
+make stop                  # stop the server
+docker compose down -v     # stop and remove all data
 ```
 
 ## License

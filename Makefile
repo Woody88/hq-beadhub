@@ -9,7 +9,7 @@
 #
 # All modes can run simultaneously on different ports.
 
-.PHONY: help start stop dev-backend dev-frontend dev-stop dev-setup dev-check docker docker-stop docker-rebuild docker-clean \
+.PHONY: help start _start stop _stop dev-backend dev-frontend dev-stop dev-setup dev-check docker docker-stop docker-rebuild docker-clean \
         _docker-start _docker-rebuild logs status clean-all prune reset-server-schema health \
         check-python fmt-python lint-python typecheck-python \
         check-frontend check hooks-install \
@@ -87,10 +87,10 @@ help:
 	@echo "    make hooks-install  - Install git hooks (pre-push checks + bd sync)"
 	@echo ""
 	@echo "  Port Allocation:"
-	@echo "    start:  backend=8000  postgres=5432  redis=6379       (Docker, for users)"
-	@echo "    dev:    backend=8000  frontend=5173  db=beadhub       (local postgres/redis)"
-	@echo "    test:   backend=8001  frontend=5174  db=beadhub_test  (separate redis db)"
-	@echo "    docker: backend=9000  frontend=9000  postgres=5433    redis=6380"
+	@echo "    start:  backend=8000  postgres=15432  redis=16379      (Docker, for users)"
+	@echo "    dev:    backend=8000  frontend=5173   db=beadhub       (local postgres/redis)"
+	@echo "    test:   backend=8001  frontend=5174   db=beadhub_test  (separate redis db)"
+	@echo "    docker: backend=9000  frontend=9000   postgres=5433    redis=6380"
 	@echo ""
 
 #
@@ -98,20 +98,28 @@ help:
 #
 
 start:
-	@POSTGRES_PASSWORD=beadhub docker compose up -d
+	@$(MAKE) ENV_FILE=.env.start _start
+
+_start:
+	@docker compose --env-file $(ENV_FILE) up -d --build
 	@echo ""
 	@echo "BeadHub is starting..."
-	@echo "  API:       http://localhost:8000"
-	@echo "  Dashboard: http://localhost:8000"
+	@echo "  API:       http://localhost:$(BEADHUB_PORT)"
+	@echo "  Dashboard: http://localhost:$(BEADHUB_PORT)"
 	@echo ""
 	@echo "Next steps:"
-	@echo "  1. Install bdh: curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash"
-	@echo "  2. In your repo: bdh :init"
+	@echo "  1. Install beads: curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash"
+	@echo "  2. Install bdh:   curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash"
+	@echo "  3. In your repo:  export BEADHUB_URL=http://localhost:$(BEADHUB_PORT)"
+	@echo "  4. In your repo:  bdh :init --project demo"
 	@echo ""
-	@$(MAKE) health BEADHUB_PORT=8000
+	@$(MAKE) health BEADHUB_PORT=$(BEADHUB_PORT)
 
 stop:
-	@docker compose down
+	@$(MAKE) ENV_FILE=.env.start _stop
+
+_stop:
+	@docker compose --env-file $(ENV_FILE) down
 	@echo "BeadHub stopped."
 
 #

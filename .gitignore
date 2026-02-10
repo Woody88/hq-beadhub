@@ -133,6 +133,7 @@ pnpm-debug.log*
 !.env.example
 !.env.dev
 !.env.docker
+!.env.start
 staging-env-vars.json
 .env.staging
 .env.production
