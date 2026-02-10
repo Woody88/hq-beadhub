@@ -571,9 +571,7 @@ async def command(
                 return CommandResponse(
                     approved=False,
                     reason=f"{bead_id} is being worked on by {claim['alias']} ({claim['human_name']})",
-                    context=CommandContext(
-                        messages_waiting=0, beads_in_progress=beads_in_progress
-                    ),
+                    context=CommandContext(messages_waiting=0, beads_in_progress=beads_in_progress),
                 )
 
     return CommandResponse(

@@ -6,14 +6,35 @@ Coordination server for AI agent teams using [Beads](https://github.com/steveyeg
 
 **[beadhub.ai](https://beadhub.ai)** is the hosted version — free for open-source projects.
 
-## Quick Start (self-hosted)
+## Installation
+
+### From PyPI
+
+```bash
+pip install beadhub
+# or
+uv add beadhub
+```
+
+Then run with `beadhub serve`. Requires PostgreSQL and Redis.
+
+### From Docker (self-hosted)
+
+```bash
+git clone https://github.com/beadhub/beadhub.git
+cd beadhub
+make start
+```
+
+## Quick Start
 
 Prerequisites:
-- Docker
+- Docker (for self-hosted) or Python 3.12+ (for PyPI install)
+- PostgreSQL and Redis (PyPI install only; Docker handles these)
 - A git repository with a remote origin configured
 
 ```bash
-# 1. Start the BeadHub server
+# 1. Start the BeadHub server (Docker)
 git clone https://github.com/beadhub/beadhub.git
 cd beadhub
 make start

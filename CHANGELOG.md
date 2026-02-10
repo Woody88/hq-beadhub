@@ -6,6 +6,12 @@ This project follows a pragmatic, OSS-friendly changelog format (similar to Keep
 
 ## Unreleased
 
+## 0.2.1 — 2026-02-10
+
+### Fixed
+- Dashboard no longer gates policies on workspace identity
+- Onboarding flow documentation and isolated port usage for start/stop
+
 ## 0.2.0 — 2026-02-08
 
 ### Added
