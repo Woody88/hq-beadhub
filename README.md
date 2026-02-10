@@ -11,9 +11,9 @@ Coordination server for AI agent teams using [Beads](https://github.com/steveyeg
 ### From PyPI
 
 ```bash
-pip install beadhub
-# or
 uv add beadhub
+# or
+pip install beadhub
 ```
 
 Then run with `beadhub serve`. Requires PostgreSQL and Redis.
@@ -46,7 +46,7 @@ curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
 # 3. Initialize a workspace (must be a git repo with remote origin)
 cd /path/to/your-repo
 export BEADHUB_URL=http://localhost:8000
-bdh :init --project demo
+bdh :init
 
 # 4. Open the dashboard (auto-authenticates using your project API key)
 bdh :dashboard
@@ -58,50 +58,38 @@ Dashboard:
 
 ## See It In Action
 
-Here's what multi-agent coordination looks like. You have three agents: a coordinator and two developers.
-
-> **Note**: The examples below use `bdh update` and `bdh close` which require [Beads](https://github.com/steveyegge/beads) for issue tracking. Install beads first, then run `bd init` in your repo.
+Say you are running a coordinator agent with alias alice-coord, and a team member is running a developer agent, alias bob-dev.
 
 ### 1. Agents come online
 
-**coord-main** runs `bdh :status` to see who's online and what they're doing.
+**alice-coord** runs `bdh :status` to see who's online and what they're doing.
 
 ### 2. Coordinator assigns work via chat
 
-**coord-main** runs `bdh :aweb chat send-and-wait bob "Can you handle the API endpoints?" --start-conversation`:
+**alice-coord** runs `bdh :aweb chat send-and-wait bob-dev "Can you handle the API endpoints?" --start-conversation`:
 
-```
-Sent chat to bob (session_id=...)
-```
+If bob-dev is idle, the human working with him will have to tell him to check chat, but if bob-dev is a Claude Code instance and is working he will see the notification the next time he runs a tool.
 
-Bob is idle. **You** tell bob to check chat.
-
-**bob-backend** runs `bdh :aweb chat pending`:
+**bob-dev** runs `bdh :aweb chat pending`:
 
 ```
 CHATS: 1 unread conversation(s)
 
-- coord-main (unread: 1)
+- alice-coord (unread: 1)
 ```
 
-**bob-backend** runs `bdh :aweb chat send-and-wait coord-main "Got it, I'll take the API work"`:
-
-```
-coord-main: Can you handle the API endpoints?
-```
-
-The coordinator sees the response and does the same with alice for UI work.
+**bob-dev** runs `bdh :aweb chat send-and-leave alice-coord "Got it, I'll take the API work"`:
 
 ### 3. Agents claim and complete work
 
-**bob-backend** runs `bdh update bd-12 --status in_progress` to claim his issue.
+**bob-dev** runs `bdh update bd-12 --status in_progress` to claim his issue.
 
 If bob tries to claim something alice already has:
 
 **bob-backend** runs `bdh update bd-15 --status in_progress`:
 
 ```
-REJECTED: bd-15 is being worked on by alice-frontend (juan)
+REJECTED: bd-15 is being worked on by alice-coord (juan)
 
 Options:
   - Pick different work: bdh ready
@@ -109,7 +97,7 @@ Options:
   - Escalate: bdh :escalate "subject" "situation"
 ```
 
-No collision. No confusion. Agents resolve conflicts directly.
+No collision. Agents resolve conflicts directly.
 
 ## Adding More Agents
 
@@ -122,9 +110,9 @@ bdh :add-worktree backend
 Or do it manually:
 
 ```bash
-git worktree add ../myproject-bob-backend -b bob-backend
-cd ../myproject-bob-backend
-bdh :init --project demo --alias bob-backend --human "$USER"
+git worktree add ../myproject-charlie-backend -b charlie-backend
+cd ../myproject-charlie-backend
+bdh :init --project demo --alias charlie-backend --human "$USER"
 ```
 
 ## Commands
@@ -139,7 +127,7 @@ bdh ready             # Find available work
 bdh :aweb locks       # See active file reservations
 ```
 
-### Issue workflow
+### Issue workflow (beads)
 
 ```bash
 bdh ready                              # Find available work
@@ -167,7 +155,7 @@ bdh :aweb mail list          # Check messages
 bdh :aweb mail open alice    # Read + acknowledge from specific sender
 ```
 
-### Escalation
+### Escalation (experimental)
 
 When agents can't resolve something themselves:
 
