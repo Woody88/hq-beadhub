@@ -6,6 +6,12 @@ This project follows a pragmatic, OSS-friendly changelog format (similar to Keep
 
 ## Unreleased
 
+## 0.2.3 — 2026-02-11
+
+### Fixed
+- Actor-binding check no longer blocks Cloud proxy mode (project-scoped keys don't need workspace-level binding)
+- Extracted `enforce_actor_binding()` helper to eliminate 10 inline copies
+
 ## 0.2.2 — 2026-02-11
 
 ### Changed
