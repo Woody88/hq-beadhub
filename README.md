@@ -6,55 +6,44 @@ Coordination server for AI agent teams using [Beads](https://github.com/steveyeg
 
 **[beadhub.ai](https://beadhub.ai)** is the hosted version — free for open-source projects.
 
-## Installation
+## Getting Started
 
-### From PyPI
+Copy a setup block and paste it to your agent — Claude Code, Cursor, Codex, or anything with terminal access.
 
-```bash
-uv add beadhub
-# or
-pip install beadhub
+### Managed (beadhub.ai)
+
+Visit [beadhub.ai](https://beadhub.ai) and copy the getting started instructions from the homepage.
+
+### Self-hosted
+
+Requires Docker. Paste this to your agent:
+
+```
+Set up BeadHub multi-agent coordination in this repo.
+
+1. Install beads if the `bd` command is not available:
+   curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+
+2. Install bdh if the `bdh` command is not available:
+   curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
+
+3. Start the BeadHub server (requires Docker):
+   git clone https://github.com/beadhub/beadhub.git /tmp/beadhub && make -C /tmp/beadhub start
+
+4. export BEADHUB_URL=http://localhost:8000
+
+5. Run `bdh :list-roles` to see available roles.
+
+6. Ask me for: a project name and which role I want
+   (show me the available roles from step 5).
+
+7. Initialize:
+   bdh :init --project <project-name> --role <role>
+
+8. Run `bdh :policy` and `bdh ready` to see project guidance and available work.
 ```
 
-Then run with `beadhub serve`. Requires PostgreSQL and Redis.
-
-### From Docker (self-hosted)
-
-```bash
-git clone https://github.com/beadhub/beadhub.git
-cd beadhub
-make start
-```
-
-## Quick Start
-
-Prerequisites:
-- Docker (for self-hosted) or Python 3.12+ (for PyPI install)
-- PostgreSQL and Redis (PyPI install only; Docker handles these)
-- A git repository with a remote origin configured
-
-```bash
-# 1. Start the BeadHub server (Docker)
-git clone https://github.com/beadhub/beadhub.git
-cd beadhub
-make start
-
-# 2. Install beads (issue tracking) and bdh (coordination CLI)
-curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
-curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
-
-# 3. Initialize a workspace (must be a git repo with remote origin)
-cd /path/to/your-repo
-export BEADHUB_URL=http://localhost:8000
-bdh :init
-
-# 4. Open the dashboard (auto-authenticates using your project API key)
-bdh :dashboard
-```
-
-Dashboard:
-- Open and auto-authenticate: `bdh :dashboard`
-- If you need to paste a key manually, use the `api_key` from `~/.config/aw/config.yaml` (the account selected by `.aw/context`)
+You can also install from PyPI (`uv add beadhub` or `pip install beadhub`) and run `beadhub serve` directly if you have PostgreSQL and Redis available.
 
 ## See It In Action
 
@@ -86,7 +75,7 @@ CHATS: 1 unread conversation(s)
 
 If bob tries to claim something alice already has:
 
-**bob-backend** runs `bdh update bd-15 --status in_progress`:
+**bob-dev** runs `bdh update bd-15 --status in_progress`:
 
 ```
 REJECTED: bd-15 is being worked on by alice-coord (juan)
@@ -198,9 +187,9 @@ Multiple agents across different repos coordinate through the same BeadHub serve
 
 ## Requirements
 
-- Docker and Docker Compose
+- Docker and Docker Compose (self-hosted) or a [beadhub.ai](https://beadhub.ai) account (managed)
 - [Beads](https://github.com/steveyegge/beads) (`bd` CLI) — issue tracking
-- [bdh](https://github.com/beadhub/bdh) CLI — coordination wrapper for `bd`
+- [bdh](https://github.com/beadhub/bdh) CLI — coordination client (wraps `bd`, adds coordination)
 
 ## Documentation
 

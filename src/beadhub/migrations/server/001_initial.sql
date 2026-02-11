@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS {{tables.projects}} (
     tenant_id UUID,
     slug TEXT NOT NULL,
     name TEXT,
+    visibility TEXT NOT NULL DEFAULT 'private'
+        CHECK (visibility IN ('private', 'public')),
     -- Active policy pointer (FK added after project_policies exists)
     active_policy_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
