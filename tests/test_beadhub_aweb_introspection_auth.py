@@ -147,3 +147,42 @@ async def test_beadhub_get_project_from_auth_rejects_invalid_proxy_signature(mon
         with pytest.raises(HTTPException) as exc_info:
             await get_project_from_auth(request, db)
     assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_beadhub_get_project_from_auth_accepts_public_reader_principal(monkeypatch):
+    """Public reader principal (type 'p') should be accepted when HMAC is valid."""
+    secret = "test-secret"
+    monkeypatch.setenv("BEADHUB_INTERNAL_AUTH_SECRET", secret)
+
+    project_id = str(uuid.uuid4())
+    principal_id = str(uuid.uuid4())
+    actor_id = str(uuid.uuid4())
+    internal_auth = _internal_auth_header_value(
+        secret=secret,
+        project_id=project_id,
+        principal_type="p",
+        principal_id=principal_id,
+        actor_id=actor_id,
+    )
+
+    request = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"x-bh-auth", internal_auth.encode("utf-8")),
+                (b"x-project-id", project_id.encode("utf-8")),
+                (b"x-aweb-actor-id", actor_id.encode("utf-8")),
+            ],
+        }
+    )
+    db = AsyncMock(spec=DatabaseInfra)
+
+    with patch(
+        "beadhub.aweb_introspection.verify_bearer_token_details",
+        new=AsyncMock(
+            side_effect=AssertionError("verify_bearer_token_details should not be called")
+        ),
+    ):
+        got = await get_project_from_auth(request, db)
+    assert got == project_id
