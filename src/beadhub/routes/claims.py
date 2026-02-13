@@ -10,8 +10,8 @@ from pydantic import BaseModel
 from beadhub.auth import validate_workspace_id
 from beadhub.aweb_introspection import get_project_from_auth
 
-from ..internal_auth import is_public_reader
 from ..db import DatabaseInfra, get_db_infra
+from ..internal_auth import is_public_reader
 from ..pagination import encode_cursor, validate_pagination_params
 
 router = APIRouter(prefix="/v1", tags=["claims"])
