@@ -141,10 +141,16 @@ async def create_policy_version(
     Version numbers are allocated atomically to prevent races. Each new version
     is one greater than the current maximum for the project.
 
+    If base_policy_id is provided, the insert is gated on it matching the
+    project's current active_policy_id (optimistic concurrency). When the IDs
+    don't match, no row is inserted and an HTTP 409 is raised. When
+    base_policy_id is None the check is skipped (backward compatible).
+
     Args:
         db: The server database manager
         project_id: The project UUID
-        base_policy_id: The policy this version is based on (for audit trail)
+        base_policy_id: If provided, the active policy this version is based on.
+            Used for optimistic concurrency and audit trail.
         bundle: The policy bundle (invariants, roles, adapters)
         created_by_workspace_id: The workspace creating this version (optional)
 
@@ -153,6 +159,7 @@ async def create_policy_version(
 
     Raises:
         HTTPException 404: If project doesn't exist
+        HTTPException 409: If base_policy_id doesn't match the active policy
     """
     # Verify project exists and is not soft-deleted
     project = await db.fetch_one(
@@ -162,14 +169,21 @@ async def create_policy_version(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Allocate version atomically by locking the project row, then computing max+1
-    # The unique constraint on (project_id, version) provides final safety
+    # Allocate version atomically by locking the project row, then computing max+1.
+    # The base_check CTE gates the INSERT on optimistic concurrency: if
+    # base_policy_id ($4) is provided it must match active_policy_id, otherwise
+    # the INSERT produces no rows and we raise 409 below.
+    # The unique constraint on (project_id, version) provides final safety.
     result = await db.fetch_one(
         """
         WITH locked_project AS (
-            SELECT id FROM {{tables.projects}}
+            SELECT id, active_policy_id FROM {{tables.projects}}
             WHERE id = $1 AND deleted_at IS NULL
             FOR UPDATE
+        ),
+        base_check AS (
+            SELECT id FROM locked_project
+            WHERE $4::UUID IS NULL OR active_policy_id = $4::UUID
         ),
         next_version AS (
             SELECT COALESCE(MAX(version), 0) + 1 AS version
@@ -178,13 +192,35 @@ async def create_policy_version(
         )
         INSERT INTO {{tables.project_policies}} (project_id, version, bundle_json, created_by_workspace_id)
         SELECT $1, nv.version, $2::jsonb, $3
-        FROM next_version nv, locked_project lp
+        FROM next_version nv, base_check bc
         RETURNING policy_id, project_id, version, bundle_json, created_by_workspace_id, created_at, updated_at
         """,
         project_id,
         json.dumps(bundle),
         created_by_workspace_id,
+        base_policy_id,
     )
+
+    if not result:
+        # Project exists (checked above) but INSERT produced no rows — the
+        # base_check CTE filtered it out, meaning base_policy_id doesn't
+        # match the current active_policy_id.
+        active = await db.fetch_one(
+            "SELECT active_policy_id FROM {{tables.projects}} WHERE id = $1",
+            project_id,
+        )
+        active_id = (
+            str(active["active_policy_id"]) if active and active["active_policy_id"] else "none"
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Policy conflict: base_policy_id {base_policy_id} "
+                f"does not match active policy {active_id}. "
+                f"Another agent may have updated the policy. "
+                f"Re-read the active policy and retry."
+            ),
+        )
 
     logger.info(
         "Created policy version %d for project %s (policy_id=%s)",

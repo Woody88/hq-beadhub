@@ -258,6 +258,9 @@ async def test_create_policy_version(db_infra):
     assert policy_v1.project_id == project_id
     assert len(policy_v1.bundle.invariants) == 1
 
+    # Activate v1 so that v2 can reference it as base
+    await activate_policy(server_db, project_id=project_id, policy_id=policy_v1.policy_id)
+
     # Create second version
     policy_v2 = await create_policy_version(
         server_db,
@@ -1102,3 +1105,86 @@ def test_get_policy_by_id_nonexistent(beadhub_server):
         headers=_auth_headers(api_key),
     )
     assert resp.status_code == 404
+
+
+# Optimistic concurrency tests
+
+
+def test_create_policy_with_stale_base_policy_id_returns_409(beadhub_server):
+    """POST /v1/policies with base_policy_id that doesn't match active returns 409."""
+    import httpx
+
+    _project_id, api_key = _init_project(beadhub_server, "test-optimistic-conflict")
+
+    # Get the bootstrapped active policy
+    active_resp = httpx.get(
+        f"{beadhub_server}/v1/policies/active",
+        headers=_auth_headers(api_key),
+    )
+    assert active_resp.status_code == 200
+    original_policy_id = active_resp.json()["policy_id"]
+
+    # Agent A reads the active policy and creates a new version based on it
+    bundle_a = {"invariants": [{"id": "a", "title": "A", "body_md": ""}], "roles": {}, "adapters": {}}
+    resp_a = httpx.post(
+        f"{beadhub_server}/v1/policies",
+        headers=_auth_headers(api_key),
+        json={"bundle": bundle_a, "base_policy_id": original_policy_id},
+    )
+    assert resp_a.status_code == 200
+    policy_a_id = resp_a.json()["policy_id"]
+
+    # Agent A activates their policy
+    httpx.post(
+        f"{beadhub_server}/v1/policies/{policy_a_id}/activate",
+        headers=_auth_headers(api_key),
+    )
+
+    # Agent B tries to create based on the ORIGINAL (now stale) policy
+    bundle_b = {"invariants": [{"id": "b", "title": "B", "body_md": ""}], "roles": {}, "adapters": {}}
+    resp_b = httpx.post(
+        f"{beadhub_server}/v1/policies",
+        headers=_auth_headers(api_key),
+        json={"bundle": bundle_b, "base_policy_id": original_policy_id},
+    )
+    assert resp_b.status_code == 409
+    assert "conflict" in resp_b.json()["detail"].lower()
+
+
+def test_create_policy_with_matching_base_policy_id_succeeds(beadhub_server):
+    """POST /v1/policies with base_policy_id matching active succeeds."""
+    import httpx
+
+    _project_id, api_key = _init_project(beadhub_server, "test-optimistic-match")
+
+    # Get the bootstrapped active policy
+    active_resp = httpx.get(
+        f"{beadhub_server}/v1/policies/active",
+        headers=_auth_headers(api_key),
+    )
+    active_policy_id = active_resp.json()["policy_id"]
+
+    # Create with matching base_policy_id
+    bundle = {"invariants": [{"id": "ok", "title": "OK", "body_md": ""}], "roles": {}, "adapters": {}}
+    resp = httpx.post(
+        f"{beadhub_server}/v1/policies",
+        headers=_auth_headers(api_key),
+        json={"bundle": bundle, "base_policy_id": active_policy_id},
+    )
+    assert resp.status_code == 200
+
+
+def test_create_policy_without_base_policy_id_skips_check(beadhub_server):
+    """POST /v1/policies without base_policy_id always succeeds (backward compatible)."""
+    import httpx
+
+    _project_id, api_key = _init_project(beadhub_server, "test-optimistic-skip")
+
+    # Create without base_policy_id — should always work
+    bundle = {"invariants": [], "roles": {}, "adapters": {}}
+    resp = httpx.post(
+        f"{beadhub_server}/v1/policies",
+        headers=_auth_headers(api_key),
+        json={"bundle": bundle},
+    )
+    assert resp.status_code == 200
