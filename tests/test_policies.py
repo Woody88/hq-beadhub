@@ -1125,7 +1125,11 @@ def test_create_policy_with_stale_base_policy_id_returns_409(beadhub_server):
     original_policy_id = active_resp.json()["policy_id"]
 
     # Agent A reads the active policy and creates a new version based on it
-    bundle_a = {"invariants": [{"id": "a", "title": "A", "body_md": ""}], "roles": {}, "adapters": {}}
+    bundle_a = {
+        "invariants": [{"id": "a", "title": "A", "body_md": ""}],
+        "roles": {},
+        "adapters": {},
+    }
     resp_a = httpx.post(
         f"{beadhub_server}/v1/policies",
         headers=_auth_headers(api_key),
@@ -1141,7 +1145,11 @@ def test_create_policy_with_stale_base_policy_id_returns_409(beadhub_server):
     )
 
     # Agent B tries to create based on the ORIGINAL (now stale) policy
-    bundle_b = {"invariants": [{"id": "b", "title": "B", "body_md": ""}], "roles": {}, "adapters": {}}
+    bundle_b = {
+        "invariants": [{"id": "b", "title": "B", "body_md": ""}],
+        "roles": {},
+        "adapters": {},
+    }
     resp_b = httpx.post(
         f"{beadhub_server}/v1/policies",
         headers=_auth_headers(api_key),
@@ -1165,7 +1173,11 @@ def test_create_policy_with_matching_base_policy_id_succeeds(beadhub_server):
     active_policy_id = active_resp.json()["policy_id"]
 
     # Create with matching base_policy_id
-    bundle = {"invariants": [{"id": "ok", "title": "OK", "body_md": ""}], "roles": {}, "adapters": {}}
+    bundle = {
+        "invariants": [{"id": "ok", "title": "OK", "body_md": ""}],
+        "roles": {},
+        "adapters": {},
+    }
     resp = httpx.post(
         f"{beadhub_server}/v1/policies",
         headers=_auth_headers(api_key),

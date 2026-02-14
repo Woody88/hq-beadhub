@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+# Pre-commit hook: bd beads flush
+#
+# Delegates to bd for flushing pending issue changes to JSONL.
+
+if command -v bd >/dev/null 2>&1; then
+    exec bd hook pre-commit "$@"
+fi

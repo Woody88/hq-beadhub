@@ -1,0 +1,36 @@
+#!/usr/bin/env sh
+# Pre-push hook: quality gates + bd sync
+#
+# Runs black, isort, ruff, and mypy in check mode before allowing a push.
+# Then delegates to bd for beads sync.
+
+set -e
+
+echo "pre-push: running quality gates..."
+
+uv run black --check src/ tests/ || {
+    echo "pre-push: black found formatting issues. Run: uv run black src/ tests/" >&2
+    exit 1
+}
+
+uv run isort --check-only src/ tests/ || {
+    echo "pre-push: isort found import ordering issues. Run: uv run isort src/ tests/" >&2
+    exit 1
+}
+
+uv run ruff check src/ tests/ || {
+    echo "pre-push: ruff found lint issues." >&2
+    exit 1
+}
+
+uv run mypy || {
+    echo "pre-push: mypy found type errors." >&2
+    exit 1
+}
+
+echo "pre-push: quality gates passed."
+
+# Delegate to bd for beads sync
+if command -v bd >/dev/null 2>&1; then
+    exec bd hooks run pre-push "$@"
+fi
