@@ -6,7 +6,7 @@ function formatTimestamp(dateStr: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
-interface ChatBubbleProps {
+export interface ChatBubbleProps {
   fromAlias: string
   body: string
   timestamp?: string

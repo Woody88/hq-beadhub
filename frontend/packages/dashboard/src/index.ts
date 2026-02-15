@@ -1,5 +1,6 @@
 // Components
 export {
+  ChatBubble,
   DashboardLayout,
   DashboardSidebar,
   DashboardNav,
@@ -8,6 +9,7 @@ export {
   navItems,
 } from './components'
 export type {
+  ChatBubbleProps,
   NavItem,
   DashboardLayoutProps,
   DashboardSidebarProps,

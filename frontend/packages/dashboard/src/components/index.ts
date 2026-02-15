@@ -9,6 +9,8 @@ export { FilterBar } from './FilterBar'
 export { navItems } from './nav-items'
 
 // Shared dashboard components used by pages
+export { ChatBubble } from './ChatBubble'
+export type { ChatBubbleProps } from './ChatBubble'
 export { Pagination } from './Pagination'
 export type { PaginationProps } from './Pagination'
 export { IssueDetailSheet } from './IssueDetailSheet'
