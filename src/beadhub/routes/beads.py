@@ -22,6 +22,7 @@ from ..beads_sync import (
     validate_issues_from_list,
 )
 from ..db import DatabaseInfra, get_db_infra
+from ..events import publish_bead_status_events
 from ..jsonl import JSONLParseError, parse_jsonl
 from ..notifications import process_notification_outbox, record_notification_intents
 from ..pagination import encode_cursor, validate_pagination_params
@@ -140,6 +141,12 @@ async def beads_upload(
             sender_agent_id=identity.agent_id,
             sender_alias=identity.alias,
         )
+        await publish_bead_status_events(
+            redis,
+            workspace_id=identity.agent_id,
+            project_slug=identity.project_slug,
+            status_changes=result.status_changes,
+        )
 
     return {
         "status": "completed" if notifications_failed == 0 else "completed_with_errors",
@@ -256,6 +263,12 @@ async def beads_upload_jsonl(
             db_infra,
             sender_agent_id=identity.agent_id,
             sender_alias=identity.alias,
+        )
+        await publish_bead_status_events(
+            redis,
+            workspace_id=identity.agent_id,
+            project_slug=identity.project_slug,
+            status_changes=result.status_changes,
         )
 
     return {

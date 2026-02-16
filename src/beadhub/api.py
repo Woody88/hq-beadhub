@@ -18,6 +18,7 @@ from .config import get_settings
 from .db import DatabaseInfra
 from .db import db_infra as default_db_infra
 from .logging import configure_logging
+from .mutation_hooks import create_mutation_handler
 from .routes.agents import router as agents_router
 from .routes.bdh import router as bdh_router
 from .routes.beads import router as beads_router
@@ -61,6 +62,7 @@ def _make_standalone_lifespan():
             # Phase 2: Only assign to app.state after ALL initialization succeeds
             app.state.redis = redis
             app.state.db = default_db_infra
+            app.state.on_mutation = create_mutation_handler(redis)
 
         except Exception:
             # Log which phase failed
@@ -99,6 +101,7 @@ def _make_library_lifespan(db_infra: DatabaseInfra, redis: Redis):
         # Use externally provided connections - no initialization needed
         app.state.redis = redis
         app.state.db = db_infra
+        app.state.on_mutation = create_mutation_handler(redis)
 
         try:
             yield

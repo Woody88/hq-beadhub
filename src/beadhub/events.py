@@ -14,7 +14,10 @@ import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable, Optional
+
+if TYPE_CHECKING:
+    from beadhub.beads_sync import BeadStatusChange
 
 from redis.asyncio import Redis
 from redis.asyncio.client import PubSub
@@ -29,6 +32,7 @@ class EventCategory(str, Enum):
     MESSAGE = "message"
     ESCALATION = "escalation"
     BEAD = "bead"
+    CHAT = "chat"
 
 
 @dataclass
@@ -124,6 +128,15 @@ class EscalationRespondedEvent(Event):
 
 
 @dataclass
+class ChatMessageEvent(Event):
+    """Event emitted when a chat message is sent."""
+
+    type: str = field(default="chat.message_sent", init=False)
+    session_id: str = ""
+    message_id: str = ""
+
+
+@dataclass
 class BeadStatusChangedEvent(Event):
     """Event emitted when a bead's status changes."""
 
@@ -133,6 +146,24 @@ class BeadStatusChangedEvent(Event):
     repo: str = ""
     old_status: str = ""
     new_status: str = ""
+
+
+@dataclass
+class BeadClaimedEvent(Event):
+    """Event emitted when a workspace claims a bead."""
+
+    type: str = field(default="bead.claimed", init=False)
+    bead_id: str = ""
+    alias: str = ""
+
+
+@dataclass
+class BeadUnclaimedEvent(Event):
+    """Event emitted when a workspace releases a bead claim."""
+
+    type: str = field(default="bead.unclaimed", init=False)
+    bead_id: str = ""
+    alias: str = ""
 
 
 def _channel_name(workspace_id: str) -> str:
@@ -155,6 +186,25 @@ async def publish_event(redis: Redis, event: Event) -> int:
     count = await redis.publish(channel, message)
     logger.debug(f"Published {event.type} to {channel}, {count} subscribers")
     return count
+
+
+async def publish_bead_status_events(
+    redis: Redis,
+    workspace_id: str,
+    project_slug: str | None,
+    status_changes: list[BeadStatusChange],
+) -> None:
+    """Publish BeadStatusChangedEvent for each status change."""
+    for sc in status_changes:
+        event = BeadStatusChangedEvent(
+            workspace_id=workspace_id,
+            project_slug=project_slug,
+            bead_id=sc.bead_id,
+            repo=sc.repo or "",
+            old_status=sc.old_status or "",
+            new_status=sc.new_status,
+        )
+        await publish_event(redis, event)
 
 
 async def stream_events(

@@ -38,6 +38,7 @@ from beadhub.beads_sync import (
 from beadhub.routes.repos import canonicalize_git_url, extract_repo_name
 
 from ..db import DatabaseInfra, get_db_infra
+from ..events import BeadClaimedEvent, BeadUnclaimedEvent, publish_bead_status_events, publish_event
 from ..jsonl import JSONLParseError, parse_jsonl
 from ..notifications import process_notification_outbox, record_notification_intents
 from ..presence import get_workspace_id_by_alias
@@ -747,12 +748,29 @@ async def sync(
                 human_name=payload.human_name or "",
                 bead_id=bead_id,
             )
+            if claim_conflict is None:
+                await publish_event(
+                    redis,
+                    BeadClaimedEvent(
+                        workspace_id=payload.workspace_id,
+                        bead_id=bead_id,
+                        alias=payload.alias,
+                    ),
+                )
         elif cmd in ("close", "delete") or (cmd == "update" and status and status != "in_progress"):
             await _delete_claim(
                 db_infra,
                 project_id=project_id,
                 workspace_id=payload.workspace_id,
                 bead_id=bead_id,
+            )
+            await publish_event(
+                redis,
+                BeadUnclaimedEvent(
+                    workspace_id=payload.workspace_id,
+                    bead_id=bead_id,
+                    alias=payload.alias,
+                ),
             )
 
     if payload.deleted_ids:
@@ -763,6 +781,14 @@ async def sync(
                 project_id=project_id,
                 workspace_id=payload.workspace_id,
                 bead_id=bid,
+            )
+            await publish_event(
+                redis,
+                BeadUnclaimedEvent(
+                    workspace_id=payload.workspace_id,
+                    bead_id=bid,
+                    alias=payload.alias,
+                ),
             )
 
     # Record notification intents in outbox, then process them.
@@ -776,6 +802,12 @@ async def sync(
             db_infra,
             sender_agent_id=sender.agent_id,
             sender_alias=sender.alias,
+        )
+        await publish_bead_status_events(
+            redis,
+            workspace_id=payload.workspace_id,
+            project_slug=sender.project_slug,
+            status_changes=result.status_changes,
         )
 
     # Update audit log (best-effort; don't fail the sync on logging issues).
