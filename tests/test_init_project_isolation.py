@@ -47,9 +47,7 @@ async def test_init_with_project_id_isolates_alias_pools(db_infra, redis_client_
 
     app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
     async with LifespanManager(app):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Init first agent in project A
             resp_a = await client.post(
                 "/v1/init",
@@ -106,9 +104,7 @@ async def test_init_without_project_id_still_works(db_infra, redis_client_async)
 
     app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
     async with LifespanManager(app):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
                 "/v1/init",
                 json={
@@ -136,9 +132,7 @@ async def test_init_with_project_id_uses_existing_server_project(db_infra, redis
 
     app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
     async with LifespanManager(app):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
                 "/v1/init",
                 json={
@@ -163,9 +157,7 @@ async def test_init_with_unknown_project_id_returns_404(db_infra, redis_client_a
 
     app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
     async with LifespanManager(app):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
                 "/v1/init",
                 json={
@@ -192,9 +184,7 @@ async def test_init_with_project_id_second_agent_independent(db_infra, redis_cli
 
     app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
     async with LifespanManager(app):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # Create two agents in project A
             for i in range(2):
                 resp = await client.post(
@@ -233,6 +223,6 @@ async def test_init_with_project_id_second_agent_independent(db_infra, redis_cli
             # Verify it's the first name (not the third), proving pool independence
             from beadhub.names import CLASSIC_NAMES
 
-            assert alias_b.startswith(CLASSIC_NAMES[0]), (
-                f"Expected alias starting with {CLASSIC_NAMES[0]!r}, got {alias_b!r}"
-            )
+            assert alias_b.startswith(
+                CLASSIC_NAMES[0]
+            ), f"Expected alias starting with {CLASSIC_NAMES[0]!r}, got {alias_b!r}"
