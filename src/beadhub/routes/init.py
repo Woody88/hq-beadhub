@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from aweb.auth import validate_project_slug
-from aweb.bootstrap import BootstrapIdentityResult, bootstrap_identity
+from aweb.bootstrap import BootstrapIdentityResult, bootstrap_identity, ensure_project
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -248,8 +248,6 @@ async def init(
 
     alias = (payload.alias or "").strip() or None
     if alias is None and canonical_origin is not None:
-        from aweb.bootstrap import ensure_project
-
         ensured = await ensure_project(
             db_infra,
             project_slug=project_slug,
