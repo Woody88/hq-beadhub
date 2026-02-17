@@ -36,6 +36,7 @@ class InitRequest(BaseModel):
     agent_type: str = Field(default="agent", max_length=32)
 
     # beadhub extension fields (optional)
+    project_id: str | None = Field(default=None, max_length=36)
     repo_origin: str | None = Field(default=None, max_length=2048)
     role: str = Field(default="agent", max_length=ROLE_MAX_LENGTH)
     hostname: str = Field(default="", max_length=255)
@@ -76,6 +77,19 @@ class InitRequest(BaseModel):
         if not is_valid_role(v):
             raise ValueError("Invalid role format")
         return v
+
+    @field_validator("project_id")
+    @classmethod
+    def _validate_project_id(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        try:
+            return str(UUID(v))
+        except ValueError:
+            raise ValueError("project_id must be a valid UUID")
 
     @field_validator("hostname")
     @classmethod
@@ -130,6 +144,28 @@ async def _infer_project_slug_from_repo(
         return None
     slug = (row.get("slug") or "").strip()
     return slug or None
+
+
+async def _resolve_server_project(
+    db_infra: DatabaseInfra, *, project_id: str
+) -> tuple[str | None, str]:
+    """Look up a project in server.projects by ID.
+
+    Returns (tenant_id, slug). Raises 404 if the project doesn't exist.
+    """
+    server_db = db_infra.get_manager("server")
+    row = await server_db.fetch_one(
+        """
+        SELECT tenant_id, slug
+        FROM {{tables.projects}}
+        WHERE id = $1 AND deleted_at IS NULL
+        """,
+        UUID(project_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="project_not_found: unknown project_id")
+    tid = row.get("tenant_id")
+    return (str(tid) if tid else None), row["slug"]
 
 
 async def _suggest_name_prefix_for_project(db_infra: DatabaseInfra, *, project_id: str) -> str:
@@ -201,12 +237,25 @@ async def init(
             raise HTTPException(status_code=422, detail="project_not_found: repo not registered")
         project_slug = inferred
 
+    # When project_id is provided (cloud mode), validate it exists and look up
+    # tenant_id so aweb creates its project record with the correct tenant scoping.
+    tenant_id: str | None = None
+    if payload.project_id:
+        tenant_id, authoritative_slug = await _resolve_server_project(
+            db_infra, project_id=payload.project_id
+        )
+        project_slug = authoritative_slug
+
     alias = (payload.alias or "").strip() or None
     if alias is None and canonical_origin is not None:
         from aweb.bootstrap import ensure_project
 
         ensured = await ensure_project(
-            db_infra, project_slug=project_slug, project_name=payload.project_name or project_slug
+            db_infra,
+            project_slug=project_slug,
+            project_name=payload.project_name or project_slug,
+            project_id=payload.project_id,
+            tenant_id=tenant_id,
         )
         prefix = await _suggest_name_prefix_for_project(db_infra, project_id=ensured.project_id)
         alias = f"{prefix}-{role_to_alias_prefix(payload.role)}"
@@ -215,6 +264,8 @@ async def init(
         db_infra,
         project_slug=project_slug,
         project_name=payload.project_name or project_slug,
+        project_id=payload.project_id,
+        tenant_id=tenant_id,
         alias=alias,
         human_name=payload.human_name or "",
         agent_type=payload.agent_type,
@@ -237,17 +288,21 @@ async def init(
     workspace_created = False
 
     async with server_db.transaction() as tx:
-        await tx.execute(
-            """
-            INSERT INTO {{tables.projects}} (id, tenant_id, slug, name, deleted_at)
-            VALUES ($1, NULL, $2, $3, NULL)
-            ON CONFLICT (id)
-            DO UPDATE SET slug = EXCLUDED.slug, name = EXCLUDED.name, deleted_at = NULL
-            """,
-            UUID(identity.project_id),
-            identity.project_slug,
-            identity.project_name or None,
-        )
+        # When project_id was provided by the caller (cloud mode), the project
+        # already exists in server.projects — skip the upsert to avoid
+        # overwriting tenant_id or other cloud-managed fields.
+        if not payload.project_id:
+            await tx.execute(
+                """
+                INSERT INTO {{tables.projects}} (id, tenant_id, slug, name, deleted_at)
+                VALUES ($1, NULL, $2, $3, NULL)
+                ON CONFLICT (id)
+                DO UPDATE SET slug = EXCLUDED.slug, name = EXCLUDED.name, deleted_at = NULL
+                """,
+                UUID(identity.project_id),
+                identity.project_slug,
+                identity.project_name or None,
+            )
 
         repo = await tx.fetch_one(
             """
