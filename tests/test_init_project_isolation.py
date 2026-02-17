@@ -173,6 +173,35 @@ async def test_init_with_unknown_project_id_returns_404(db_infra, redis_client_a
 
 
 @pytest.mark.asyncio
+async def test_init_with_project_id_without_repo_origin(db_infra, redis_client_async):
+    """Cloud init with project_id but no repo_origin returns identity without workspace."""
+    slug = f"norep-{uuid.uuid4().hex[:8]}"
+    tenant_id = str(uuid.uuid4())
+    pre_created_pid = await _pre_create_project(db_infra, slug=slug, tenant_id=tenant_id)
+
+    app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/v1/init",
+                json={
+                    "project_slug": slug,
+                    "project_id": pre_created_pid,
+                    "project_name": slug,
+                    "alias": "alice",
+                    "human_name": "Cloud Agent",
+                    "agent_type": "agent",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+            assert data["project_id"] == pre_created_pid
+            assert data["alias"] == "alice"
+            assert data["workspace_id"] is None
+            assert data["repo_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_init_with_project_id_second_agent_independent(db_infra, redis_client_async):
     """Adding a second agent to project A doesn't affect project B's alias pool."""
     slug = f"indep-{uuid.uuid4().hex[:8]}"
