@@ -107,7 +107,10 @@ async def suggest_name_prefix(
     if "Authorization" in request.headers or "X-BH-Auth" in request.headers:
         auth_project_id = UUID(await get_project_from_auth(request, db))
 
-    # Look up repo to get project context (exclude soft-deleted repos and projects)
+    # Look up repo(s) by canonical origin to see if this repo is already registered.
+    # IMPORTANT: if the caller is authenticated, we MUST scope the suggestion to
+    # the authenticated project (not the first matching repo in some other project),
+    # otherwise classic-name allocation leaks across projects.
     results = await server_db.fetch_all(
         """
         SELECT r.id as repo_id, r.canonical_origin,
@@ -120,13 +123,11 @@ async def suggest_name_prefix(
         canonical_origin,
     )
 
-    if not results:
-        if auth_project_id is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Repo not registered: {canonical_origin}. Run 'bdh :init' to register.",
-            )
+    project_id: UUID
+    project_slug: str
+    repo_id: str
 
+    if auth_project_id is not None:
         project_row = await server_db.fetch_one(
             """
             SELECT id, slug
@@ -140,29 +141,26 @@ async def suggest_name_prefix(
 
         project_id = project_row["id"]
         project_slug = project_row["slug"]
-        repo_id = ""
+        matched_repo = next((r for r in results if r["project_id"] == auth_project_id), None)
+        repo_id = str(matched_repo["repo_id"]) if matched_repo is not None else ""
     else:
+        if not results:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Repo not registered: {canonical_origin}. Run 'bdh :init' to register.",
+            )
         if len(results) > 1:
-            if auth_project_id is not None:
-                matched = next((r for r in results if r["project_id"] == auth_project_id), None)
-                if matched is None:
-                    raise HTTPException(
-                        status_code=403, detail="Repo does not belong to your project"
-                    )
-                result = matched
-            else:
-                project_slugs = [r["project_slug"] for r in results]
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Repo exists in multiple projects: {', '.join(project_slugs)}. "
-                    "Specify project with BEADHUB_PROJECT or --project.",
-                )
-        else:
-            result = results[0]
+            project_slugs = [r["project_slug"] for r in results]
+            raise HTTPException(
+                status_code=409,
+                detail=f"Repo exists in multiple projects: {', '.join(project_slugs)}. "
+                "Specify project with BEADHUB_PROJECT or --project.",
+            )
 
+        result = results[0]
         project_id = result["project_id"]
-        repo_id = str(result["repo_id"])
         project_slug = result["project_slug"]
+        repo_id = str(result["repo_id"])
 
     # Query aweb.agents (not server.workspaces) for used aliases.
     # bootstrap_identity creates agents in aweb.agents, and an agent can exist
