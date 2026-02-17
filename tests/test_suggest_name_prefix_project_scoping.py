@@ -69,4 +69,3 @@ async def test_suggest_name_prefix_uses_authenticated_project_even_if_repo_regis
             assert auth_data["canonical_origin"] == "github.com/test/snp-repo-a"
             assert auth_data["repo_id"] == ""
             assert auth_data["name_prefix"] == "alice"
-
