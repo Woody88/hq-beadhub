@@ -59,7 +59,7 @@ You must be in a git clone or a git worktree with a remote origin. Both bd and b
 SETUP
 
 1. Check if bd is installed (bd --version). If not, install it:
-   curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+   brew install beads
 
 2. Check if bdh is installed (bdh --version). If not, install it:
    curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash

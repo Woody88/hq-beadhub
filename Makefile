@@ -108,7 +108,7 @@ _start:
 	@echo "  Dashboard: http://localhost:$(BEADHUB_PORT)"
 	@echo ""
 	@echo "Next steps:"
-	@echo "  1. Install beads: curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash"
+	@echo "  1. Install beads: brew install beads"
 	@echo "  2. Install bdh:   curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash"
 	@echo "  3. In your repo:  export BEADHUB_URL=http://localhost:$(BEADHUB_PORT)"
 	@echo "  4. In your repo:  bdh :init --project demo"

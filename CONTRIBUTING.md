@@ -75,7 +75,7 @@ BeadHub coordinates work across contributors — claim tasks, communicate with t
 Install `bd` and `bdh` if you don't have them:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+brew install beads
 curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
 ```
 
