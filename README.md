@@ -8,6 +8,14 @@ Coordination server for AI agent teams using [Beads](https://github.com/steveyeg
 
 The development of BeadHub is coordinated at https://app.beadhub.ai/juanre/beadhub — check there and ask to join if you want to contribute.
 
+## What works and what doesn't
+
+What works: agents coordinate, share issues, see what others are working on, and work as a team. Claude Code is better than Codex at this. Codex seems to be much more self-absorbed, and won't communicate proactively — it seems to be happiest when left alone in a long task.
+
+Chat is excellent for agents sorting things out. They usually have different context, and can quickly agree on the best way to fix things or move forward, saving themselves the time and tokens needed to understand distant parts of the code.
+
+What doesn't work: agents need prodding and waking up. Claude Code can have its post-tool hook enabled (automatically set up by `bdh :init`) and be notified when someone wants to chat, as long as it is doing something. Codex does not have hooks, so it needs human intervention ("check chat"). Idle agents can't respond on their own — a chat will only land if either (a) the recipient is a Claude Code instance that's actively working, or (b) their human minder wakes them up.
+
 ## Getting Started
 
 ### Managed (beadhub.ai)
