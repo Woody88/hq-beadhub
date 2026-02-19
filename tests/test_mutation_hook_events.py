@@ -6,14 +6,16 @@ trigger SSE events via the on_mutation callback registered by beadhub.
 
 import asyncio
 import json
+import logging
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 
 from beadhub.api import create_app
-from beadhub.mutation_hooks import _translate
+from beadhub.mutation_hooks import _translate, create_mutation_handler
 
 
 async def _collect_events(pubsub, max_events=10, first_timeout=2.0, next_timeout=0.2):
@@ -394,11 +396,6 @@ def test_translate_reservation_acquired_alias_defaults_empty():
 @pytest.mark.asyncio
 async def test_on_mutation_publishes_event_when_enrichment_fails(redis_client_async, caplog):
     """Events are still published when enrichment fails (e.g., transient DB error)."""
-    import logging
-    from unittest.mock import MagicMock
-
-    from beadhub.mutation_hooks import create_mutation_handler
-
     broken_db_infra = MagicMock()
     broken_db_infra.get_manager.side_effect = RuntimeError("DB connection lost")
 

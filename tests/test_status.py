@@ -420,20 +420,22 @@ async def test_status_stream_accepts_all_event_categories(db_infra, redis_client
             )
             headers = _auth_headers(init["api_key"])
 
-            for category in EventCategory:
-                try:
-                    resp = await asyncio.wait_for(
-                        client.get(
-                            "/v1/status/stream",
-                            params={"event_types": category.value},
-                            headers=headers,
-                        ),
-                        timeout=0.5,
-                    )
-                    # If response returned quickly, it should not be a validation error
-                    assert resp.status_code != 422, (
-                        f"'{category.value}' should be a valid event type but got 422"
-                    )
-                except asyncio.TimeoutError:
-                    # Stream started (passed validation) — expected for valid types
-                    pass
+            # Pass all categories at once as comma-separated string.
+            # If any is invalid, the endpoint returns 422 immediately.
+            all_types = ",".join(c.value for c in EventCategory)
+            try:
+                resp = await asyncio.wait_for(
+                    client.get(
+                        "/v1/status/stream",
+                        params={"event_types": all_types},
+                        headers=headers,
+                    ),
+                    timeout=0.5,
+                )
+                # If response returned quickly, it should not be a validation error
+                assert resp.status_code != 422, (
+                    f"All EventCategory values should be valid but got 422: {resp.text}"
+                )
+            except asyncio.TimeoutError:
+                # Stream started (passed validation) — expected
+                pass
