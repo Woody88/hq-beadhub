@@ -365,7 +365,9 @@ async def _delete_claim(
         )
 
 
-async def _get_bead_title(beads_db: AsyncDatabaseManager, project_id: str, bead_id: str) -> str | None:
+async def _get_bead_title(
+    beads_db: AsyncDatabaseManager, project_id: str, bead_id: str
+) -> str | None:
     """Look up the title of a bead from the issues table."""
     row = await beads_db.fetch_one(
         "SELECT title FROM {{tables.beads_issues}} "
