@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
 import { Separator } from "../components/ui/separator"
+import { Tooltip, TooltipTrigger, TooltipContent } from "../components/ui/tooltip"
 import { type ApiClient, type StatusResponse, type WorkspacePresence } from "../lib/api"
 import { useSSE, type SSEEvent } from "../hooks/useSSE"
 import { useStore } from "../hooks/useStore"
@@ -95,6 +96,10 @@ function WorkspaceRow({
     unknown: "bg-muted-foreground",
   }
 
+  const humanName = workspace.human_name ?? workspaceInfo?.human_name
+  const repo = workspace.canonical_origin ?? workspaceInfo?.repo
+  const branch = workspace.current_branch ?? workspaceInfo?.branch
+
   // Build the metadata items for line 2
   const metaItems: React.ReactNode[] = []
   if (workspace.role) {
@@ -102,18 +107,26 @@ function WorkspaceRow({
   } else if (workspace.program) {
     metaItems.push(<span key="program" className="shrink-0">{workspace.program}</span>)
   }
-  if (showHumanName && workspaceInfo?.human_name) {
-    metaItems.push(
+  if (showHumanName && humanName) {
+    const humanSpan = (
       <span key="human" className="flex items-center gap-1 shrink-0">
         <User className="h-3 w-3" />
-        {workspaceInfo.human_name}
+        {humanName}
       </span>
     )
+    if (workspace.timezone) {
+      metaItems.push(
+        <Tooltip key="human" delayDuration={300}>
+          <TooltipTrigger asChild>{humanSpan}</TooltipTrigger>
+          <TooltipContent side="bottom">{workspace.timezone}</TooltipContent>
+        </Tooltip>
+      )
+    } else {
+      metaItems.push(humanSpan)
+    }
   }
-  if (workspaceInfo?.repo) {
-    const repoLabel = workspaceInfo.branch
-      ? `${workspaceInfo.repo}:${workspaceInfo.branch}`
-      : workspaceInfo.repo
+  if (repo) {
+    const repoLabel = branch ? `${repo}:${branch}` : repo
     metaItems.push(
       <span key="repo" className="flex items-center gap-1 min-w-0">
         <GitBranch className="h-3 w-3 shrink-0" />
@@ -417,9 +430,9 @@ export function StatusPage() {
                   }
                   return (
                     <div>
-                      {filteredAgents.map((workspace, idx) => (
+                      {filteredAgents.map((workspace) => (
                         <WorkspaceRow
-                          key={`${workspace.alias}-${idx}`}
+                          key={workspace.workspace_id}
                           workspace={workspace}
                           workspaceInfo={workspaceById.get(workspace.workspace_id)}
                           showHumanName={!ownerFilter}

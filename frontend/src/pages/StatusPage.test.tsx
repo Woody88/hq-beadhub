@@ -1,13 +1,35 @@
 import { describe, it, expect, vi } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { MemoryRouter } from "react-router-dom"
 import { ApiProvider } from "@beadhub/dashboard"
+import { TooltipProvider } from "@beadhub/dashboard/components/ui"
 import { StatusPage } from "@beadhub/dashboard/pages"
 import type { ApiClient, StatusResponse, WorkspacePresence } from "@beadhub/dashboard"
 
 // Suppress SSE fetch errors in test output
 vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no SSE in tests")))
+
+function makeAgent(
+  overrides: Partial<StatusResponse["agents"][0]> = {}
+): StatusResponse["agents"][0] {
+  return {
+    workspace_id: "ws-1",
+    alias: "kate",
+    member: null,
+    human_name: null,
+    program: "claude-code",
+    role: "frontend",
+    status: "active",
+    current_branch: null,
+    canonical_origin: null,
+    timezone: null,
+    current_issue: null,
+    last_seen: new Date().toISOString(),
+    ...overrides,
+  }
+}
 
 function makeStatus(
   agents: StatusResponse["agents"] = []
@@ -91,27 +113,20 @@ function renderStatusPage(api: ApiClient) {
   return render(
     <QueryClientProvider client={queryClient}>
       <ApiProvider client={api}>
-        <MemoryRouter>
-          <StatusPage />
-        </MemoryRouter>
+        <TooltipProvider>
+          <MemoryRouter>
+            <StatusPage />
+          </MemoryRouter>
+        </TooltipProvider>
       </ApiProvider>
     </QueryClientProvider>
   )
 }
 
 describe("StatusPage workspace cards", () => {
-  it("shows human_name when available", async () => {
-    const ws = makeWorkspace({ human_name: "Juan Reyero" })
-    const agent = {
-      workspace_id: ws.workspace_id,
-      alias: ws.alias,
-      member: null,
-      program: ws.program,
-      role: ws.role,
-      status: ws.status,
-      current_issue: null,
-      last_seen: ws.last_seen,
-    }
+  it("shows human_name from status endpoint", async () => {
+    const agent = makeAgent({ human_name: "Juan Reyero" })
+    const ws = makeWorkspace({ human_name: null })
     const api = makeMockApi(makeStatus([agent]), [ws])
     renderStatusPage(api)
 
@@ -120,21 +135,23 @@ describe("StatusPage workspace cards", () => {
     })
   })
 
-  it("shows repo:branch format", async () => {
-    const ws = makeWorkspace({
-      repo: "github.com/beadhub/beadhub",
-      branch: "kate",
+  it("falls back to workspaceInfo human_name when status lacks it", async () => {
+    const agent = makeAgent({ human_name: null })
+    const ws = makeWorkspace({ human_name: "Juan Reyero" })
+    const api = makeMockApi(makeStatus([agent]), [ws])
+    renderStatusPage(api)
+
+    await waitFor(() => {
+      expect(screen.getByText("Juan Reyero")).toBeInTheDocument()
     })
-    const agent = {
-      workspace_id: ws.workspace_id,
-      alias: ws.alias,
-      member: null,
-      program: ws.program,
-      role: ws.role,
-      status: ws.status,
-      current_issue: null,
-      last_seen: ws.last_seen,
-    }
+  })
+
+  it("shows canonical_origin:current_branch from status endpoint", async () => {
+    const agent = makeAgent({
+      canonical_origin: "github.com/beadhub/beadhub",
+      current_branch: "kate",
+    })
+    const ws = makeWorkspace()
     const api = makeMockApi(makeStatus([agent]), [ws])
     renderStatusPage(api)
 
@@ -147,18 +164,54 @@ describe("StatusPage workspace cards", () => {
     })
   })
 
+  it("shows canonical_origin without branch when branch is null", async () => {
+    const agent = makeAgent({
+      canonical_origin: "github.com/beadhub/beadhub",
+      current_branch: null,
+    })
+    const ws = makeWorkspace({ repo: null, branch: null })
+    const api = makeMockApi(makeStatus([agent]), [ws])
+    renderStatusPage(api)
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText((_, el) =>
+          el?.textContent === "github.com/beadhub/beadhub"
+        ).length
+      ).toBeGreaterThanOrEqual(1)
+    })
+    // Should not contain a colon (no branch appended)
+    const repoElements = screen.getAllByText((_, el) =>
+      el?.textContent === "github.com/beadhub/beadhub"
+    )
+    repoElements.forEach(el => {
+      expect(el.textContent).not.toContain(":")
+    })
+  })
+
+  it("shows timezone as tooltip on human_name", async () => {
+    const agent = makeAgent({
+      human_name: "Juan Reyero",
+      timezone: "Europe/Madrid",
+    })
+    const ws = makeWorkspace()
+    const api = makeMockApi(makeStatus([agent]), [ws])
+    renderStatusPage(api)
+
+    await waitFor(() => {
+      expect(screen.getByText("Juan Reyero")).toBeInTheDocument()
+    })
+
+    // Hover over the human name to trigger tooltip
+    await userEvent.hover(screen.getByText("Juan Reyero"))
+    await waitFor(() => {
+      expect(screen.getByRole("tooltip")).toHaveTextContent("Europe/Madrid")
+    })
+  })
+
   it("omits human_name when not set", async () => {
+    const agent = makeAgent({ human_name: null })
     const ws = makeWorkspace({ human_name: null })
-    const agent = {
-      workspace_id: ws.workspace_id,
-      alias: ws.alias,
-      member: null,
-      program: ws.program,
-      role: ws.role,
-      status: ws.status,
-      current_issue: null,
-      last_seen: ws.last_seen,
-    }
     const api = makeMockApi(makeStatus([agent]), [ws])
     renderStatusPage(api)
 

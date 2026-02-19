@@ -256,9 +256,13 @@ export interface StatusResponse {
     workspace_id: string
     alias: string
     member: string | null
+    human_name: string | null
     program: string | null
     role: string | null
     status: string
+    current_branch: string | null
+    canonical_origin: string | null
+    timezone: string | null
     current_issue: string | null
     last_seen: string
   }>
