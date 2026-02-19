@@ -1,11 +1,8 @@
 """Tests for presence module - Redis presence tracking and secondary indexes."""
 
-import os
 import uuid
 
 import pytest
-import pytest_asyncio
-from redis.asyncio import Redis
 
 from beadhub.presence import (
     get_workspace_id_by_alias,
@@ -17,22 +14,6 @@ from beadhub.presence import (
     list_agent_presences_by_workspace_ids,
     update_agent_presence,
 )
-
-TEST_REDIS_URL = os.getenv("BEADHUB_TEST_REDIS_URL", "redis://localhost:6379/15")
-
-
-@pytest_asyncio.fixture
-async def async_redis():
-    """Async Redis client for presence tests."""
-    client = Redis.from_url(TEST_REDIS_URL, decode_responses=True)
-    try:
-        await client.ping()
-    except Exception:
-        pytest.skip("Redis is not available")
-    await client.flushdb()
-    yield client
-    await client.flushdb()
-    await client.aclose()
 
 
 class TestGetWorkspaceIdsByProjectId:

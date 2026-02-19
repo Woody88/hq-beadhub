@@ -137,6 +137,8 @@ ignore = [
 known-first-party = ["beadhub"]
 
 [tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "aweb_conformance: black-box conformance tests (skipped unless AWEB_CONFORMANCE=1)",
 ]
