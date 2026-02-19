@@ -164,9 +164,7 @@ async def test_status_agents_include_enriched_fields(db_infra, redis_client_asyn
 
     app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
     async with LifespanManager(app):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             init = await _init_project_auth(
                 client,
                 project_slug=f"test-{uuid.uuid4().hex[:8]}",
@@ -192,9 +190,7 @@ async def test_status_agents_include_enriched_fields(db_infra, redis_client_asyn
                 timezone="Europe/Madrid",
             )
 
-            resp = await client.get(
-                "/v1/status", params={"workspace_id": init["workspace_id"]}
-            )
+            resp = await client.get("/v1/status", params={"workspace_id": init["workspace_id"]})
             assert resp.status_code == 200
             data = resp.json()
 
