@@ -14,7 +14,7 @@ from beadhub.auth import validate_workspace_id
 from beadhub.aweb_introspection import get_project_from_auth
 
 from ..db import DatabaseInfra, get_db_infra
-from ..events import stream_events_multi
+from ..events import EventCategory, stream_events_multi
 from ..internal_auth import is_public_reader
 from ..presence import (
     list_agent_presences_by_workspace_ids,
@@ -24,6 +24,7 @@ from .workspaces import is_valid_canonical_origin
 
 DEFAULT_WORKSPACE_LIMIT = 200
 MAX_WORKSPACE_LIMIT = 1000
+VALID_SSE_EVENT_TYPES = frozenset(c.value for c in EventCategory)
 # Short TTL keeps SSE subscriptions fresh while reducing DB churn.
 WORKSPACE_IDS_CACHE_TTL_SECONDS = 10
 
@@ -553,7 +554,7 @@ async def status_stream(
     if event_types:
         event_type_set = {t.strip().lower() for t in event_types.split(",")}
         # Validate event types
-        valid_types = {"reservation", "message", "escalation", "bead"}
+        valid_types = VALID_SSE_EVENT_TYPES
         invalid = event_type_set - valid_types
         if invalid:
             raise HTTPException(
