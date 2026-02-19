@@ -99,6 +99,9 @@ export function formatEventDescription(event: SSEEvent): string {
     case "reservation.released":
       return `${alias} unlocked ${formatPaths(paths ?? [])}`
 
+    case "reservation.renewed":
+      return `${alias} renewed lock on ${formatPaths(paths ?? [])}`
+
     default:
       return event.type
   }

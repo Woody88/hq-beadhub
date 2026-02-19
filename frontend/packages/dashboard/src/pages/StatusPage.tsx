@@ -198,6 +198,7 @@ function EventFeed({ events, currentProjectSlug }: { events: SSEEvent[]; current
     "escalation.responded": "text-success",
     "reservation.acquired": "text-muted-foreground",
     "reservation.released": "text-muted-foreground",
+    "reservation.renewed": "text-muted-foreground",
   }
 
   return (

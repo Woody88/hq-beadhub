@@ -224,6 +224,17 @@ describe("formatEventDescription", () => {
     )
   })
 
+  it("formats reservation.renewed events", () => {
+    const event = makeEvent({
+      type: "reservation.renewed",
+      alias: "alice",
+      paths: ["src/api.ts"],
+    })
+    expect(formatEventDescription(event)).toBe(
+      "alice renewed lock on src/api.ts"
+    )
+  })
+
   it("falls back to raw event type for unknown events", () => {
     const event = makeEvent({ type: "workspace.connected" })
     expect(formatEventDescription(event)).toBe("workspace.connected")
