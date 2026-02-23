@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
+from aweb.routes.agents import router as aweb_agents_router
 from aweb.routes.auth import router as aweb_auth_router
 from aweb.routes.chat import router as aweb_chat_router
 from aweb.routes.messages import router as aweb_messages_router
@@ -219,6 +220,11 @@ def create_app(
     # beadhub endpoints.
     app.include_router(bdh_router)
     app.include_router(agents_router)
+    # aweb agent lifecycle routes. beadhub's agents_router (above) takes precedence on
+    # GET "" (list) and POST /suggest-alias-prefix, masking the aweb versions of those
+    # two routes. All other aweb lifecycle routes (rotate, retire, deregister, log,
+    # resolve, heartbeat, access mode) are not duplicated and route to aweb normally.
+    app.include_router(aweb_agents_router)
     app.include_router(beads_router)
     app.include_router(claims_router)
     app.include_router(escalations_router)
