@@ -34,6 +34,11 @@ from .routes.workspaces import router as workspaces_router
 
 logger = logging.getLogger(__name__)
 
+_MISSING_CUSTODY_KEY_WARNING = (
+    "AWEB_CUSTODY_KEY not configured — custodial agent signing disabled. "
+    "Set AWEB_CUSTODY_KEY to a 64-char hex string to enable."
+)
+
 
 def _make_standalone_lifespan():
     """Create lifespan for standalone mode (creates own DB and Redis connections)."""
@@ -59,6 +64,9 @@ def _make_standalone_lifespan():
             await default_db_infra.initialize()
             db_initialized = True
             logger.info("Database initialized")
+
+            if not os.environ.get("AWEB_CUSTODY_KEY"):
+                logger.warning(_MISSING_CUSTODY_KEY_WARNING)
 
             # Phase 2: Only assign to app.state after ALL initialization succeeds
             app.state.redis = redis
@@ -98,6 +106,12 @@ def _make_library_lifespan(db_infra: DatabaseInfra, redis: Redis):
         log_level = os.getenv("BEADHUB_LOG_LEVEL", "info")
         configure_logging(log_level=log_level, json_format=json_format)
         logger.info("Starting BeadHub server (library mode)")
+
+        if not os.environ.get("AWEB_CUSTODY_KEY"):
+            logger.warning(
+                "AWEB_CUSTODY_KEY not configured — custodial agent signing disabled. "
+                "Set AWEB_CUSTODY_KEY to a 64-char hex string to enable."
+            )
 
         # Use externally provided connections - no initialization needed
         app.state.redis = redis
