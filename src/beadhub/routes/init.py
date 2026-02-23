@@ -34,6 +34,8 @@ class InitRequest(BaseModel):
     alias: str | None = Field(default=None, min_length=1, max_length=64)
     human_name: str = Field(default="", max_length=64)
     agent_type: str = Field(default="agent", max_length=32)
+    lifetime: str = Field(default="ephemeral", pattern="^(persistent|ephemeral)$")
+    custody: str | None = Field(default=None, pattern="^(self|custodial)$")
 
     # beadhub extension fields (optional)
     project_id: str | None = Field(default=None, max_length=36)
@@ -125,6 +127,9 @@ class InitResponse(BaseModel):
     alias: str
     created: bool = False
     workspace_created: bool = False
+    did: str | None = None
+    custody: str | None = None
+    lifetime: str = "ephemeral"
 
 
 async def _infer_project_slug_from_repo(
@@ -267,6 +272,8 @@ async def init(
         alias=alias,
         human_name=payload.human_name or "",
         agent_type=payload.agent_type,
+        lifetime=payload.lifetime,
+        custody=payload.custody,
     )
 
     if canonical_origin is None:
@@ -278,6 +285,9 @@ async def init(
             agent_id=identity.agent_id,
             alias=identity.alias,
             created=identity.created,
+            did=identity.did,
+            custody=identity.custody,
+            lifetime=identity.lifetime,
         )
 
     server_db = db_infra.get_manager("server")
@@ -398,4 +408,7 @@ async def init(
         alias=identity.alias,
         created=identity.created,
         workspace_created=workspace_created,
+        did=identity.did,
+        custody=identity.custody,
+        lifetime=identity.lifetime,
     )

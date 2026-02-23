@@ -165,3 +165,69 @@ async def test_beadhub_init_returns_409_when_alias_already_bound_to_different_re
             assert "workspace_repo_mismatch" in resp2.text
             assert "github.com/test/repo-a" in resp2.text
             assert "github.com/test/repo-b" in resp2.text
+
+
+@pytest.mark.asyncio
+async def test_beadhub_init_returns_identity_fields(db_infra, redis_client_async):
+    """Init response includes did, custody, and lifetime from aweb identity."""
+    app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/v1/init",
+                json={
+                    "project_slug": "test-init-identity",
+                    "repo_origin": "git@github.com:test/init-identity.git",
+                    "alias": "id-agent",
+                    "role": "agent",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+            assert data["did"] is not None
+            assert data["did"].startswith("did:key:z")
+            assert data["custody"] == "custodial"
+            assert data["lifetime"] == "ephemeral"
+
+
+@pytest.mark.asyncio
+async def test_beadhub_init_persistent_override(db_infra, redis_client_async):
+    """Caller can override lifetime to persistent."""
+    app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/v1/init",
+                json={
+                    "project_slug": "test-init-persistent",
+                    "repo_origin": "git@github.com:test/init-persistent.git",
+                    "alias": "persist-agent",
+                    "role": "agent",
+                    "lifetime": "persistent",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+            assert data["lifetime"] == "persistent"
+            assert data["custody"] == "custodial"
+            assert data["did"].startswith("did:key:z")
+
+
+@pytest.mark.asyncio
+async def test_beadhub_init_without_repo_returns_identity_fields(db_infra, redis_client_async):
+    """Init without repo_origin (aweb-only) also returns identity fields."""
+    app = create_app(db_infra=db_infra, redis=redis_client_async, serve_frontend=False)
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/v1/init",
+                json={
+                    "project_slug": "test-init-no-repo-id",
+                    "alias": "norep-agent",
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+            assert data["did"] is not None
+            assert data["custody"] == "custodial"
+            assert data["lifetime"] == "ephemeral"
