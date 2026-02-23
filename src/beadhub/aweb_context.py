@@ -37,16 +37,23 @@ async def resolve_aweb_identity(request: Request, db) -> AwebIdentity:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     aweb_db = db.get_manager("aweb")
+    # Includes soft-deleted agents so we can return 410 instead of a misleading 401.
     agent = await aweb_db.fetch_one(
         """
-        SELECT alias, human_name, did, custody, lifetime, status
+        SELECT alias, human_name, did, custody, lifetime, status, deleted_at
         FROM {{tables.agents}}
-        WHERE agent_id = $1 AND deleted_at IS NULL
+        WHERE agent_id = $1
         """,
         UUID(agent_id),
     )
     if not agent:
         raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if agent.get("deleted_at") is not None:
+        raise HTTPException(status_code=410, detail="Agent has been deregistered")
+    agent_status = agent.get("status") or "active"
+    if agent_status in ("deregistered", "retired"):
+        raise HTTPException(status_code=410, detail=f"Agent is {agent_status}")
 
     project = await aweb_db.fetch_one(
         """
