@@ -172,12 +172,14 @@ async function handleVoiceNoteEdit(
   bridgeIdentity: { workspace_id: string; alias: string },
   redis: Redis,
 ): Promise<void> {
-  // Only process if this message ID is a pending voice note
-  const pending = pendingVoiceNotes.get(rawMessage.id);
-  if (!pending) return;
-
   // Fetch the full message if we only have a partial
   const message = rawMessage.partial ? await rawMessage.fetch() : rawMessage;
+
+  // Scripty sends its own reply message and edits it with the transcript.
+  // Check if this updated message is a reply to a pending voice note.
+  const referencedId = message.reference?.messageId;
+  const pending = pendingVoiceNotes.get(referencedId ?? "") ?? pendingVoiceNotes.get(message.id);
+  if (!pending) return;
 
   // Guard: must be a thread in our configured channel
   if (!message.channel.isThread()) return;
@@ -185,13 +187,13 @@ async function handleVoiceNoteEdit(
 
   const transcript = message.content;
   if (!transcript?.trim()) {
-    // Scripty may fire a partial edit before adding content — wait for the real one
-    console.log("[discord-listener] Voice note edit has no text content yet, skipping");
+    console.log("[discord-listener] Scripty edit has no text content yet, skipping");
     return;
   }
 
-  // Consume the pending entry
-  pendingVoiceNotes.delete(rawMessage.id);
+  // Consume the pending entry (keyed by the voice note ID)
+  const pendingKey = referencedId && pendingVoiceNotes.has(referencedId) ? referencedId : message.id;
+  pendingVoiceNotes.delete(pendingKey);
 
   const { authorName, threadId } = pending;
   console.log(
