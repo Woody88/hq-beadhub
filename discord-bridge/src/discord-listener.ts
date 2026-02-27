@@ -192,8 +192,9 @@ async function handleVoiceNoteEdit(
   }
 
   // Skip Scripty's intermediate progress messages before the real transcript arrives.
-  // Known stages: "Downloading file `...`...", "Transcoding file `...`..."
-  if (/^(downloading|transcoding) file/i.test(transcript)) {
+  // Scripty stages: "Downloading file...", "Transcoding file...", "Transcribing file..."
+  // Match any "<verb>ing file" pattern to catch all progress stages.
+  if (/^\w+ing file/i.test(transcript)) {
     console.log("[discord-listener] Scripty progress message, waiting for real transcript");
     return;
   }
