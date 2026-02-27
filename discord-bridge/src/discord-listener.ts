@@ -191,6 +191,13 @@ async function handleVoiceNoteEdit(
     return;
   }
 
+  // Skip Scripty's intermediate progress messages (e.g. "Downloading file `voice-message.ogg`...")
+  // The real transcription won't contain a file download prompt.
+  if (/downloading file/i.test(transcript)) {
+    console.log("[discord-listener] Scripty progress message, waiting for real transcript");
+    return;
+  }
+
   // Consume the pending entry (keyed by the voice note ID)
   const pendingKey = referencedId && pendingVoiceNotes.has(referencedId) ? referencedId : message.id;
   pendingVoiceNotes.delete(pendingKey);
