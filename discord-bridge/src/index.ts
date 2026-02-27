@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, type TextChannel } from "discord.js";
+import { Client, GatewayIntentBits, Partials, type TextChannel } from "discord.js";
 import Redis from "ioredis";
 import { config } from "./config.js";
 import { SessionMap } from "./session-map.js";
@@ -27,6 +27,7 @@ async function main(): Promise<void> {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
     ],
+    partials: [Partials.Message, Partials.Channel],
   });
 
   await client.login(config.discord.token);
