@@ -46,7 +46,7 @@ WORKDIR /home/node
 # Claude Code — native install as node user (required for `claude remote-control`)
 # npm-installed Claude Code fails with `node: bad option: --sdk-url`
 RUN curl -fsSL https://claude.ai/install.sh | bash
-ENV PATH="/home/node/.claude/local/bin:${PATH}"
+ENV PATH="/home/node/.local/bin:${PATH}"
 
 # No ENTRYPOINT — K8s manifest controls command/args
 CMD ["bash"]
