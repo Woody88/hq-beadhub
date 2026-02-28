@@ -153,8 +153,21 @@ async function handleMessage(
     return;
   }
 
-  // Default: BeadHub-managed thread — relay via BeadHub API
-  await relayToBeadHub(sessionId, displayName, message, bridgeIdentity);
+  // Default: BeadHub-managed thread — relay via BeadHub API.
+  // If BeadHub returns 404 (session gone), fall back to orchestrator routing.
+  try {
+    await relayToBeadHub(sessionId, displayName, message, bridgeIdentity);
+  } catch (err) {
+    const is404 = err instanceof Error && err.message.includes("404");
+    if (is404) {
+      console.log(`[discord-listener] BeadHub session ${sessionId.slice(0, 8)}... gone — falling back to orchestrator`);
+      await sessionMap.setWithSource(sessionId, threadId, "orchestrator");
+      await pushToOrchestratorInbox(redis, threadId, sessionId, displayName, message.content);
+      startTypingIndicator(message.channel);
+    } else {
+      throw err;
+    }
+  }
 }
 
 /**
@@ -234,8 +247,20 @@ async function handleVoiceNoteEdit(
     return;
   }
 
-  // BeadHub-managed thread
-  await relayToBeadHub(sessionId, authorName, message, bridgeIdentity, cleanTranscript);
+  // BeadHub-managed thread — fall back to orchestrator if session is gone
+  try {
+    await relayToBeadHub(sessionId, authorName, message, bridgeIdentity, cleanTranscript);
+  } catch (err) {
+    const is404 = err instanceof Error && err.message.includes("404");
+    if (is404) {
+      console.log(`[discord-listener] BeadHub session ${sessionId.slice(0, 8)}... gone — falling back to orchestrator`);
+      await sessionMap.setWithSource(sessionId, threadId, "orchestrator");
+      await pushToOrchestratorInbox(redis, threadId, sessionId, authorName, cleanTranscript);
+      startTypingIndicator(thread);
+    } else {
+      throw err;
+    }
+  }
 }
 
 /** Create a new session and route to orchestrator inbox */
