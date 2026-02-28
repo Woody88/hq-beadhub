@@ -61,12 +61,22 @@ export interface OrchestratorChatInboxMessage {
   timestamp: string;
 }
 
+/** A file attachment included in an orchestrator outbox message (base64-encoded) */
+export interface OrchestratorAttachment {
+  /** Original filename (e.g. "screenshot.png") */
+  filename: string;
+  /** Base64-encoded file content */
+  data: string;
+}
+
 /** Orchestrator Deployment → Bridge via Redis LIST */
 export interface OrchestratorOutboxMessage {
   thread_id: string;
   session_id: string;
   response: string;
   timestamp: string;
+  /** Optional file attachments (base64-encoded). Files >8MB are rejected. */
+  attachments?: OrchestratorAttachment[];
 }
 
 /** Source of a session mapping */
