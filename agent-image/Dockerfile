@@ -24,8 +24,8 @@ RUN curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release
 RUN curl -fsSL "https://github.com/dolthub/dolt/releases/latest/download/dolt-linux-${TARGETARCH}.tar.gz" \
     | tar -xz -C /usr/local --strip-components=1 dolt-linux-${TARGETARCH}/bin/dolt
 
-# Claude Code + Wrangler
-RUN npm install -g @anthropic-ai/claude-code wrangler
+# Wrangler
+RUN npm install -g wrangler
 
 # beads (bd) + bdh CLI
 RUN curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash \
@@ -34,7 +34,7 @@ RUN curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/i
 # node user (UID 1000) already exists in node:22 base — give it sudo
 RUN echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node
 
-# Claude Code config: skip ALL interactive prompts + dangerous mode
+# Claude Code config: skip ALL interactive prompts + dangerously skip permissions
 RUN mkdir -p /home/node/.claude \
     && echo '{"hasCompletedOnboarding": true, "hasTrustDialogAccepted": true, "hasTrustDialogHooksAccepted": true}' > /home/node/.claude.json \
     && echo '{"skipDangerousModePermissionPrompt": true}' > /home/node/.claude/settings.json \
@@ -42,6 +42,11 @@ RUN mkdir -p /home/node/.claude \
 
 USER node
 WORKDIR /home/node
+
+# Claude Code — native install as node user (required for `claude remote-control`)
+# npm-installed Claude Code fails with `node: bad option: --sdk-url`
+RUN curl -fsSL https://claude.ai/install.sh | bash
+ENV PATH="/home/node/.claude/local/bin:${PATH}"
 
 # No ENTRYPOINT — K8s manifest controls command/args
 CMD ["bash"]

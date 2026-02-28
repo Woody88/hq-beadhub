@@ -78,9 +78,10 @@ Agent-to-agent chatter → bdh chat → Discord (visibility only)
 
 **The orchestrator pod runs `claude remote-control`, NOT a dispatcher or `claude -p`.** The entrypoint:
 1. Sets up git auth and copies CLAUDE.md from the mounted ConfigMap
-2. Configures `bypassPermissions` mode and trust dialog acceptance
-3. Starts `claude remote-control` — the human connects from the Claude mobile app
-4. The session persists as long as the pod is running
+2. Starts `claude remote-control --dangerously-skip-permissions` — the human connects from the Claude mobile app
+3. The session persists as long as the pod is running
+
+**Important:** The agent image must use the native Claude Code install (`claude install`), not the npm package. The npm version fails with `node: bad option: --sdk-url` when running `claude remote-control`.
 
 Worker communication happens via `bdh :aweb chat` — the orchestrator checks for pending messages proactively. Discord shows inter-agent chatter for visibility.
 
