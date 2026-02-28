@@ -61,22 +61,37 @@ export interface OrchestratorChatInboxMessage {
   timestamp: string;
 }
 
-/** A file attachment included in an orchestrator outbox message (base64-encoded) */
-export interface OrchestratorAttachment {
+/** A file attachment included in an agent outbox message (base64-encoded) */
+export interface AgentAttachment {
   /** Original filename (e.g. "screenshot.png") */
   filename: string;
   /** Base64-encoded file content */
   data: string;
 }
 
-/** Orchestrator Deployment → Bridge via Redis LIST */
+/** @deprecated Use AgentAttachment */
+export type OrchestratorAttachment = AgentAttachment;
+
+/** Any agent → Bridge via Redis LIST (agent:outbox key) */
+export interface AgentOutboxMessage {
+  /** Agent alias — used to pick the webhook username/emoji */
+  from_alias: string;
+  thread_id: string;
+  session_id: string;
+  response: string;
+  timestamp: string;
+  /** Optional file attachments (base64-encoded). Files >8MB are rejected. */
+  attachments?: AgentAttachment[];
+}
+
+/** Orchestrator Deployment → Bridge via Redis LIST (orchestrator:outbox key) */
 export interface OrchestratorOutboxMessage {
   thread_id: string;
   session_id: string;
   response: string;
   timestamp: string;
   /** Optional file attachments (base64-encoded). Files >8MB are rejected. */
-  attachments?: OrchestratorAttachment[];
+  attachments?: AgentAttachment[];
 }
 
 /** Source of a session mapping */

@@ -1,4 +1,5 @@
 import {
+  AttachmentBuilder,
   ChannelType,
   WebhookClient,
   type Client,
@@ -7,7 +8,29 @@ import {
   type ThreadChannel,
 } from "discord.js";
 import { config } from "./config.js";
+import type { AgentAttachment } from "./types.js";
 import type { SessionMap } from "./session-map.js";
+
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024; // 8MB
+
+/**
+ * Decode base64 attachments into Discord AttachmentBuilder objects.
+ * Files exceeding MAX_ATTACHMENT_BYTES are skipped with a warning logged.
+ */
+export function buildAttachments(attachments: AgentAttachment[]): AttachmentBuilder[] {
+  const files: AttachmentBuilder[] = [];
+  for (const att of attachments) {
+    const buf = Buffer.from(att.data, "base64");
+    if (buf.byteLength > MAX_ATTACHMENT_BYTES) {
+      console.warn(
+        `[discord-sender] Skipping attachment "${att.filename}": ${buf.byteLength} bytes exceeds 8MB limit`,
+      );
+      continue;
+    }
+    files.push(new AttachmentBuilder(buf, { name: att.filename }));
+  }
+  return files;
+}
 
 /** displayName/username (lowercased) → Discord user ID, built at startup */
 const discordMentionMap = new Map<string, string>();
@@ -100,24 +123,29 @@ export async function getOrCreateThread(
 /**
  * Send a message to a Discord thread using the webhook,
  * impersonating the agent via username override.
+ * Optional attachments (base64-encoded) are sent with the final chunk.
  */
 export async function sendAsAgent(
   webhook: WebhookClient,
   thread: ThreadChannel,
   alias: string,
   body: string,
+  attachments?: AgentAttachment[],
 ): Promise<void> {
   const emoji = AGENT_AVATARS[alias] ?? "🤖";
   const username = `${emoji} ${alias}`;
   const content = applyMentions(body);
+  const files = buildAttachments(attachments ?? []);
 
   // Split long messages
   const chunks = splitMessage(content, config.maxDiscordMessageLength);
-  for (const chunk of chunks) {
+  for (let i = 0; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
     await webhook.send({
-      content: chunk,
+      content: chunks[i],
       username,
       threadId: thread.id,
+      ...(isLast && files.length > 0 ? { files } : {}),
     });
   }
 }

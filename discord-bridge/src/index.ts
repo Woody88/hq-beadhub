@@ -64,8 +64,8 @@ async function main(): Promise<void> {
   // 7. Start Discord → BeadHub + orchestrator listener
   startDiscordListener(client, sessionMap, bridgeIdentity, redis);
 
-  // 8. Start orchestrator outbox → Discord relay
-  await startOrchestratorRelay(redis, textChannel, webhook, sessionMap);
+  // 8. Start agent outbox → Discord relay (orchestrator:outbox + agent:outbox)
+  await startOrchestratorRelay(redis, textChannel, webhook);
 
   // 9. Health check server
   const healthServer = Bun.serve({
