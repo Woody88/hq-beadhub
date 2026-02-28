@@ -8,6 +8,7 @@ import { markRelayed } from "./redis-listener.js";
 import { config } from "./config.js";
 
 const ORCHESTRATOR_INBOX = "orchestrator:inbox";
+const ORCHESTRATOR_INBOX_CHANNEL = "orchestrator:inbox:notify";
 
 /**
  * Scripty voice transcription bot application ID.
@@ -138,7 +139,7 @@ async function handleMessage(
 
   if (!sessionId) {
     // New thread with no session — route to orchestrator
-    await routeToOrchestrator(redis, sessionMap, threadId, displayName, message.content, bridgeIdentity);
+    await routeToOrchestrator(redis, sessionMap, threadId, displayName, message.content);
     startTypingIndicator(message.channel);
     return;
   }
@@ -147,15 +148,7 @@ async function handleMessage(
   const source = await sessionMap.getSource(threadId);
 
   if (source === "orchestrator") {
-    // Orchestrator-managed thread — relay via BeadHub chat API so orchestrator
-    // picks it up through bdh :aweb chat pending (primary channel), and also
-    // push to Redis inbox as fallback.
-    try {
-      await relayToBeadHub(sessionId, displayName, message, bridgeIdentity);
-    } catch {
-      // BeadHub relay failed — fall back to Redis-only
-      console.log(`[discord-listener] BeadHub relay failed for orchestrator thread, using Redis fallback`);
-    }
+    // Orchestrator-managed thread — route via Redis inbox + pub/sub notification
     await pushToOrchestratorInbox(redis, threadId, sessionId, displayName, message.content);
     startTypingIndicator(message.channel);
     return;
@@ -242,7 +235,7 @@ async function handleVoiceNoteEdit(
   const sessionId = await sessionMap.getSessionId(threadId);
 
   if (!sessionId) {
-    await routeToOrchestrator(redis, sessionMap, threadId, authorName, cleanTranscript, bridgeIdentity);
+    await routeToOrchestrator(redis, sessionMap, threadId, authorName, cleanTranscript);
     startTypingIndicator(thread);
     return;
   }
@@ -250,11 +243,7 @@ async function handleVoiceNoteEdit(
   const source = await sessionMap.getSource(threadId);
 
   if (source === "orchestrator") {
-    try {
-      await relayToBeadHub(sessionId, authorName, message, bridgeIdentity, cleanTranscript);
-    } catch {
-      console.log(`[discord-listener] BeadHub relay failed for orchestrator voice note, using Redis fallback`);
-    }
+    // Orchestrator-managed thread — route via Redis inbox + pub/sub notification
     await pushToOrchestratorInbox(redis, threadId, sessionId, authorName, cleanTranscript);
     startTypingIndicator(thread);
     return;
@@ -283,22 +272,9 @@ async function routeToOrchestrator(
   threadId: string,
   displayName: string,
   content: string,
-  bridgeIdentity?: { workspace_id: string; alias: string },
 ): Promise<void> {
   const sessionId = crypto.randomUUID();
   await sessionMap.setWithSource(sessionId, threadId, "orchestrator");
-
-  // Relay via BeadHub chat API so orchestrator picks it up through bdh :aweb chat
-  if (bridgeIdentity) {
-    try {
-      await joinSession(sessionId, bridgeIdentity.workspace_id, bridgeIdentity.alias);
-      const body = `[${displayName} via Discord] ${content}`;
-      const messageId = await sendMessage(sessionId, body, bridgeIdentity.workspace_id, bridgeIdentity.alias);
-      markRelayed(messageId, config.echoSuppressionTtlMs);
-    } catch {
-      console.log(`[discord->orchestrator] BeadHub relay failed for new session, using Redis only`);
-    }
-  }
 
   await pushToOrchestratorInbox(redis, threadId, sessionId, displayName, content);
   console.log(
@@ -322,7 +298,9 @@ async function pushToOrchestratorInbox(
     timestamp: new Date().toISOString(),
   };
 
-  await redis.rpush(ORCHESTRATOR_INBOX, JSON.stringify(payload));
+  const json = JSON.stringify(payload);
+  await redis.rpush(ORCHESTRATOR_INBOX, json);
+  await redis.publish(ORCHESTRATOR_INBOX_CHANNEL, json);
   console.log(
     `[discord->orchestrator] ${author} in thread ${threadId}: ${message.slice(0, 80)}`,
   );
