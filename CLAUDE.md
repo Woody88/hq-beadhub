@@ -69,48 +69,39 @@ Workers and orchestrator run as separate Claude Code instances in separate git w
 
 ### Orchestrator Deployment (K8s)
 
-The orchestrator runs as a **Deployment** in the `beadhub` namespace on a Raspberry Pi 5 (k3s). Its architecture is critical to understand:
+The orchestrator runs as a **Deployment** in the `beadhub` namespace on a Raspberry Pi 5 (k3s). It uses **Claude Code Remote Control** — a persistent interactive session that the human connects to from the Claude mobile app.
 
 ```
-Human types in Discord thread
-  → discord-bridge: maps thread to session UUID, RPUSHes to Redis
-  → Redis LIST "orchestrator:inbox" (BLPOP)
-  → Orchestrator pod: Node.js dispatcher receives message
-  → Dispatcher runs: claude --session-id <uuid> -p "<message>" --dangerously-skip-permissions
-  → Captures stdout
-  → RPUSHes response to Redis LIST "orchestrator:outbox"
-  → discord-bridge: BLPOPs outbox, posts to Discord thread
+Human ↔ Claude Code Remote Control (phone app) ↔ orchestrator pod
+Agent-to-agent chatter → bdh chat → Discord (visibility only)
 ```
 
-**The orchestrator pod runs a Node.js BLPOP dispatcher, NOT a direct `claude -p` session.** The dispatcher is an inline `.mjs` script that:
-1. Installs `ioredis` at startup
-2. BLPOP-loops on `orchestrator:inbox`
-3. Spawns `claude` as a subprocess per message
-4. Uses `--session-id` for new sessions, `--resume` for known sessions
-5. Recovers from pod restarts (re-creates sessions when `--resume` fails)
-6. Pushes responses to `orchestrator:outbox`
+**The orchestrator pod runs `claude remote-control`, NOT a dispatcher or `claude -p`.** The entrypoint:
+1. Sets up git auth and copies CLAUDE.md from the mounted ConfigMap
+2. Configures `bypassPermissions` mode and trust dialog acceptance
+3. Starts `claude remote-control` — the human connects from the Claude mobile app
+4. The session persists as long as the pod is running
+
+Worker communication happens via `bdh :aweb chat` — the orchestrator checks for pending messages proactively. Discord shows inter-agent chatter for visibility.
 
 ### CRITICAL: Do Not Modify the Orchestrator Deployment
 
-**The orchestrator Deployment manifest is managed by ArgoCD from `Woody88/homelab-k8s`.** If an agent modifies it via `kubectl apply/patch/edit`, it breaks the Discord→Redis→Dispatcher pipeline and the orchestrator becomes unreachable.
-
-**What happened (incident beadhub-fj7o):** A bead asked the orchestrator to "update its system prompt." The orchestrator interpreted this as rewriting its own Deployment spec — replacing the Node.js dispatcher with a direct `claude -p` entrypoint. This broke all Discord message routing. Recovery required force-replacing the Deployment from the Git source and resolving ArgoCD merge conflicts.
+**The orchestrator Deployment manifest is managed by ArgoCD from `Woody88/homelab-k8s`.** If an agent modifies it via `kubectl apply/patch/edit`, ArgoCD will revert the change and break the session.
 
 **Rules:**
 - The orchestrator Deployment is in `Woody88/homelab-k8s` at `manifests/platform/beadhub/orchestrator.yaml`
-- Changes to the orchestrator system prompt or dispatcher logic must go through a PR to homelab-k8s
+- Changes to the orchestrator entrypoint or CLAUDE.md must go through a commit to homelab-k8s (ArgoCD syncs from Git)
 - Agents must NEVER `kubectl patch/apply/edit` the `orchestrator` Deployment directly
 - Agents CAN create/modify Jobs (workers), ConfigMaps, and other resources freely
-- If the orchestrator stops responding to Discord messages, check: `kubectl logs deployment/orchestrator -n beadhub` — if you don't see `[dispatcher]` log lines, the manifest was likely overwritten
+- If the orchestrator pod is not responding, check: `kubectl logs deployment/orchestrator -n beadhub`
 
 ### Recovery Procedure
 
-If the orchestrator dispatcher is broken:
+If the orchestrator Remote Control session is broken:
 
 ```bash
-# 1. Check if the dispatcher is running
+# 1. Check if remote-control is running
 kubectl logs deployment/orchestrator -n beadhub --tail=5
-# Should show: [dispatcher] Starting BLPOP loop on orchestrator:inbox
 
 # 2. If not, force restore from Git
 cd ~/Code/DevOps/homelab-k8s
@@ -121,9 +112,8 @@ kubectl replace -f manifests/platform/beadhub/orchestrator.yaml --force
 kubectl -n argocd patch app beadhub --type merge \
   -p '{"operation":{"sync":{"revision":"HEAD","prune":true,"syncStrategy":{"apply":{"force":true}}}}}'
 
-# 4. Verify
-kubectl logs deployment/orchestrator -n beadhub --tail=5
-# Must show [dispatcher] lines
+# 4. Verify — look for Remote Control session URL
+kubectl logs deployment/orchestrator -n beadhub --tail=10
 ```
 
 ### Related Repos
