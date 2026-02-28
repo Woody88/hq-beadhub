@@ -123,7 +123,18 @@ kubectl logs deployment/orchestrator -n beadhub --tail=10
 |------|----------|
 | `Woody88/hq-beadhub` (this repo) | discord-bridge source, agent-image Dockerfile, beads, project docs |
 | `Woody88/homelab-k8s` | K8s manifests including orchestrator Deployment, RBAC, kustomization |
-| `beadhub/beadhub` | Upstream BeadHub (this repo is a fork) |
+| `beadhub/beadhub` | Upstream BeadHub (this repo was originally forked from here) |
+
+### CRITICAL: Git Remote Rules
+
+This repo is a fork of `beadhub/beadhub`, but **the `upstream` remote has been intentionally removed**. The only remote is `origin` → `Woody88/hq-beadhub`.
+
+**Rules for ALL agents:**
+- **NEVER add an `upstream` remote** pointing to `beadhub/beadhub`
+- **NEVER push to `beadhub/beadhub`** — not fixes, not PRs, not anything
+- **ALL pushes go to `origin` (`Woody88/hq-beadhub`) only**
+- If you need upstream changes, the human will handle cherry-picks manually
+- If `git remote -v` shows any remote other than `origin`, stop and ask the human
 
 ### Discord Bridge
 
