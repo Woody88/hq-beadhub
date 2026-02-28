@@ -203,9 +203,17 @@ async function handleVoiceNoteEdit(
   const pendingKey = referencedId && pendingVoiceNotes.has(referencedId) ? referencedId : message.id;
   pendingVoiceNotes.delete(pendingKey);
 
+  // Strip Scripty formatting: remove leading `> ` blockquote lines and trailing `-# ...` metadata
+  const cleanTranscript = transcript
+    .split("\n")
+    .filter((line) => !line.startsWith("-#"))
+    .map((line) => (line.startsWith("> ") ? line.slice(2) : line))
+    .join(" ")
+    .trim();
+
   const { authorName, threadId } = pending;
   console.log(
-    `[discord-listener] Scripty transcription (via edit) for ${authorName}: "${transcript.slice(0, 80)}"`,
+    `[discord-listener] Scripty transcription (via edit) for ${authorName}: "${cleanTranscript.slice(0, 80)}"`,
   );
 
   // Route the transcription as the original human's message
@@ -213,7 +221,7 @@ async function handleVoiceNoteEdit(
   const sessionId = await sessionMap.getSessionId(threadId);
 
   if (!sessionId) {
-    await routeToOrchestrator(redis, sessionMap, threadId, authorName, transcript);
+    await routeToOrchestrator(redis, sessionMap, threadId, authorName, cleanTranscript);
     startTypingIndicator(thread);
     return;
   }
@@ -221,13 +229,13 @@ async function handleVoiceNoteEdit(
   const source = await sessionMap.getSource(threadId);
 
   if (source === "orchestrator") {
-    await pushToOrchestratorInbox(redis, threadId, sessionId, authorName, transcript);
+    await pushToOrchestratorInbox(redis, threadId, sessionId, authorName, cleanTranscript);
     startTypingIndicator(thread);
     return;
   }
 
   // BeadHub-managed thread
-  await relayToBeadHub(sessionId, authorName, message, bridgeIdentity, transcript);
+  await relayToBeadHub(sessionId, authorName, message, bridgeIdentity, cleanTranscript);
 }
 
 /** Create a new session and route to orchestrator inbox */
