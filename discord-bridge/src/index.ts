@@ -6,6 +6,7 @@ import { getWebhook, loadGuildMembers } from "./discord-sender.js";
 import { startRedisListener } from "./redis-listener.js";
 import { startDiscordListener } from "./discord-listener.js";
 import { startOrchestratorRelay } from "./orchestrator-relay.js";
+import { startAiRelay } from "./ai-relay.js";
 import { getOrCreateBridgeIdentity } from "./beadhub-client.js";
 
 async function main(): Promise<void> {
@@ -67,7 +68,20 @@ async function main(): Promise<void> {
   // 8. Start agent outbox → Discord relay (orchestrator:outbox + agent:outbox)
   await startOrchestratorRelay(redis, textChannel, webhook);
 
-  // 9. Health check server
+  // 9. Start AI outbox → Discord relay (if AI channel configured)
+  if (config.discord.aiChannelId && config.discord.aiWebhookUrl) {
+    const aiChannel = await client.channels.fetch(config.discord.aiChannelId);
+    if (aiChannel && aiChannel.isTextBased() && !aiChannel.isDMBased()) {
+      const { WebhookClient } = await import("discord.js");
+      const aiWebhook = new WebhookClient({ url: config.discord.aiWebhookUrl });
+      await startAiRelay(redis, aiChannel as TextChannel, aiWebhook);
+      console.log(`[bridge] AI relay started for #${(aiChannel as TextChannel).name}`);
+    } else {
+      console.warn(`[bridge] AI channel ${config.discord.aiChannelId} is not a valid text channel`);
+    }
+  }
+
+  // 10. Health check server
   const healthServer = Bun.serve({
     port: config.health.port,
     fetch(req) {

@@ -95,4 +95,19 @@ export interface OrchestratorOutboxMessage {
 }
 
 /** Source of a session mapping */
-export type SessionSource = "beadhub" | "orchestrator";
+export type SessionSource = "beadhub" | "orchestrator" | "ai";
+
+/** Bridge → AI Dispatcher via ai:inbox */
+export interface AiInboxMessage {
+  thread_id: string;
+  author: string;
+  message: string;
+  timestamp: string;
+}
+
+/** AI Job → Bridge via ai:outbox */
+export interface AiOutboxMessage {
+  thread_id: string;
+  response: string;
+  timestamp: string;
+}

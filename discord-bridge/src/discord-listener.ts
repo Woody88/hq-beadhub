@@ -2,13 +2,14 @@ import type { Client, Message, PartialMessage, ThreadChannel } from "discord.js"
 import { MessageFlags } from "discord.js";
 import type Redis from "ioredis";
 import type { SessionMap } from "./session-map.js";
-import type { OrchestratorInboxMessage } from "./types.js";
+import type { OrchestratorInboxMessage, AiInboxMessage } from "./types.js";
 import { joinSession, sendMessage } from "./beadhub-client.js";
 import { markRelayed } from "./redis-listener.js";
 import { config } from "./config.js";
 
 const ORCHESTRATOR_INBOX = "orchestrator:inbox";
 const ORCHESTRATOR_INBOX_CHANNEL = "orchestrator:inbox:notify";
+const AI_INBOX = "ai:inbox";
 
 /**
  * Scripty voice transcription bot application ID.
@@ -119,8 +120,19 @@ async function handleMessage(
   // Only handle messages in threads
   if (!message.channel.isThread()) return;
 
-  // Only handle threads in our configured channel
-  if (message.channel.parentId !== config.discord.channelId) return;
+  const parentId = message.channel.parentId;
+
+  // Route AI channel messages to ai:inbox
+  if (config.discord.aiChannelId && parentId === config.discord.aiChannelId) {
+    const threadId = message.channel.id;
+    const displayName = message.member?.displayName ?? message.author.username;
+    await pushToAiInbox(redis, sessionMap, threadId, displayName, message.content);
+    startTypingIndicator(message.channel);
+    return;
+  }
+
+  // Only handle threads in our configured agent chat channel
+  if (parentId !== config.discord.channelId) return;
 
   const threadId = message.channel.id;
   const displayName = message.member?.displayName ?? message.author.username;
@@ -303,6 +315,33 @@ async function pushToOrchestratorInbox(
   await redis.publish(ORCHESTRATOR_INBOX_CHANNEL, json);
   console.log(
     `[discord->orchestrator] ${author} in thread ${threadId}: ${message.slice(0, 80)}`,
+  );
+}
+
+/** Push message to ai:inbox Redis list for the AI dispatcher */
+async function pushToAiInbox(
+  redis: Redis,
+  sessionMap: SessionMap,
+  threadId: string,
+  author: string,
+  message: string,
+): Promise<void> {
+  // Track the thread as AI-sourced (for outbox routing)
+  const existingSession = await sessionMap.getSessionId(threadId);
+  if (!existingSession) {
+    await sessionMap.setWithSource(threadId, threadId, "ai");
+  }
+
+  const payload: AiInboxMessage = {
+    thread_id: threadId,
+    author,
+    message,
+    timestamp: new Date().toISOString(),
+  };
+
+  await redis.rpush(AI_INBOX, JSON.stringify(payload));
+  console.log(
+    `[discord->ai] ${author} in thread ${threadId}: ${message.slice(0, 80)}`,
   );
 }
 

@@ -4,6 +4,9 @@ export const config = {
     channelId: requiredEnv("DISCORD_CHANNEL_ID"),
     guildId: requiredEnv("DISCORD_GUILD_ID"),
     webhookUrl: requiredEnv("DISCORD_WEBHOOK_URL"),
+    /** Optional AI orchestrator channel (separate from agent chat) */
+    aiChannelId: env("DISCORD_AI_CHANNEL_ID", ""),
+    aiWebhookUrl: env("DISCORD_AI_WEBHOOK_URL", ""),
   },
   beadhub: {
     url: env("BEADHUB_URL", "http://localhost:8000"),
