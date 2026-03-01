@@ -122,17 +122,10 @@ async function handleMessage(
 
   const parentId = message.channel.parentId;
 
-  // Route AI channel messages to ai:inbox
-  if (config.discord.aiChannelId && parentId === config.discord.aiChannelId) {
-    const threadId = message.channel.id;
-    const displayName = message.member?.displayName ?? message.author.username;
-    await pushToAiInbox(redis, sessionMap, threadId, displayName, message.content);
-    startTypingIndicator(message.channel);
-    return;
-  }
+  const isAiChannel = config.discord.aiChannelId && parentId === config.discord.aiChannelId;
 
-  // Only handle threads in our configured agent chat channel
-  if (parentId !== config.discord.channelId) return;
+  // Only handle threads in our configured channels
+  if (!isAiChannel && parentId !== config.discord.channelId) return;
 
   const threadId = message.channel.id;
   const displayName = message.member?.displayName ?? message.author.username;
@@ -143,6 +136,13 @@ async function handleMessage(
     console.log(
       `[discord-listener] Voice note from ${displayName} in thread ${threadId} — awaiting Scripty`,
     );
+    return;
+  }
+
+  // Route AI channel messages to ai:inbox
+  if (isAiChannel) {
+    await pushToAiInbox(redis, sessionMap, threadId, displayName, message.content);
+    startTypingIndicator(message.channel);
     return;
   }
 
@@ -207,9 +207,11 @@ async function handleVoiceNoteEdit(
   const pending = pendingVoiceNotes.get(referencedId ?? "") ?? pendingVoiceNotes.get(message.id);
   if (!pending) return;
 
-  // Guard: must be a thread in our configured channel
+  // Guard: must be a thread in one of our configured channels
   if (!message.channel.isThread()) return;
-  if (message.channel.parentId !== config.discord.channelId) return;
+  const editParentId = message.channel.parentId;
+  const isAiChannel = config.discord.aiChannelId && editParentId === config.discord.aiChannelId;
+  if (!isAiChannel && editParentId !== config.discord.channelId) return;
 
   const transcript = message.content;
   if (!transcript?.trim()) {
@@ -244,6 +246,14 @@ async function handleVoiceNoteEdit(
 
   // Route the transcription as the original human's message
   const thread = message.channel as ThreadChannel;
+
+  // AI channel transcriptions → ai:inbox
+  if (isAiChannel) {
+    await pushToAiInbox(redis, sessionMap, threadId, authorName, cleanTranscript);
+    startTypingIndicator(thread);
+    return;
+  }
+
   const sessionId = await sessionMap.getSessionId(threadId);
 
   if (!sessionId) {
