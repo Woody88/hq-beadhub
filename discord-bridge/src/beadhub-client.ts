@@ -65,6 +65,30 @@ export async function getSessionMessages(
   return data.messages;
 }
 
+/**
+ * Fetch messages using a specific Bearer API key (bypasses HMAC auth).
+ * Useful for cross-project sessions like control-plane where HMAC may not resolve.
+ */
+export async function getSessionMessagesWithKey(
+  sessionId: string,
+  apiKey: string,
+  limit = 50,
+): Promise<AdminMessage[]> {
+  const url = `${config.beadhub.url}/v1/chat/admin/sessions/${sessionId}/messages?limit=${limit}`;
+  const res = await fetch(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`BeadHub GET admin/messages → ${res.status}: ${body}`);
+  }
+  const data = await res.json() as { messages: AdminMessage[] };
+  return data.messages;
+}
+
 /** List all chat sessions in the project. */
 export async function listSessions(limit = 200): Promise<AdminSession[]> {
   const data = await api<{ sessions: AdminSession[] }>(

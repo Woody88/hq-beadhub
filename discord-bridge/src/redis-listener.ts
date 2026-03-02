@@ -3,7 +3,7 @@ import type { TextChannel, ThreadChannel, WebhookClient } from "discord.js";
 import type { BeadHubEvent, ChatMessageEvent } from "./types.js";
 import type { SessionMap } from "./session-map.js";
 import { config } from "./config.js";
-import { getSessionMessages, getProjectRepos } from "./beadhub-client.js";
+import { getSessionMessages, getSessionMessagesWithKey, getProjectRepos } from "./beadhub-client.js";
 import { getOrCreateThread, sendAsAgent } from "./discord-sender.js";
 import { stopTypingIndicator } from "./discord-listener.js";
 
@@ -85,6 +85,37 @@ async function handleChatMessage(
   if (wasRelayed(event.message_id)) return;
   markRelayed(event.message_id, echoTtlMs);
 
+  // Control-plane messages → use dedicated Bearer API key (HMAC doesn't resolve cross-project)
+  if (
+    ordisWebhookConfig &&
+    event.project_id === ordisWebhookConfig.controlPlaneProjectId
+  ) {
+    const cpApiKey = config.controlPlane.apiKey;
+    if (!cpApiKey) {
+      console.warn(`[bridge] CONTROL_PLANE_API_KEY not set — cannot relay ordis message`);
+      return;
+    }
+
+    // Fetch message body using control-plane Bearer auth (with retry for race condition)
+    let msgBody = event.preview;
+    for (const delay of [0, 500, 1500]) {
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+      try {
+        const msgs = await getSessionMessagesWithKey(event.session_id, cpApiKey, 5);
+        const target = msgs.find((m) => m.message_id === event.message_id);
+        if (target) {
+          msgBody = target.body;
+          break;
+        }
+      } catch (err) {
+        console.warn(`[bridge] Error fetching control-plane message: ${err}`);
+      }
+    }
+
+    await postToOrdisChannel(event.from_alias, msgBody);
+    return;
+  }
+
   // Fetch full message body (event.preview is truncated to 80 chars)
   // Use event.project_id so cross-project sessions resolve correctly.
   const messages = await getSessionMessages(event.session_id, 1, event.project_id || undefined);
@@ -99,38 +130,18 @@ async function handleChatMessage(
 
   // Double-check this is the message we expect
   if (latest.message_id !== event.message_id) {
-    // Race condition: Redis event can fire before DB transaction commits.
-    // Wait briefly, then retry with more messages.
-    await new Promise((r) => setTimeout(r, 500));
+    // Race condition: a newer message was sent. Fetch more to find ours.
     const all = await getSessionMessages(event.session_id, 20, event.project_id || undefined);
     const target = all.find((m) => m.message_id === event.message_id);
     if (!target) {
-      // One more retry after a longer delay
-      await new Promise((r) => setTimeout(r, 1500));
-      const retry = await getSessionMessages(event.session_id, 20, event.project_id || undefined);
-      const found = retry.find((m) => m.message_id === event.message_id);
-      if (!found) {
-        console.warn(`[bridge] Could not find message ${event.message_id} after retries`);
-        return;
-      }
-      fromAlias = found.from_agent;
-      body = found.body;
-    } else {
-      fromAlias = target.from_agent;
-      body = target.body;
+      console.warn(`[bridge] Could not find message ${event.message_id}`);
+      return;
     }
+    fromAlias = target.from_agent;
+    body = target.body;
   } else {
     fromAlias = latest.from_agent;
     body = latest.body;
-  }
-
-  // Control-plane messages from ordis → post to #ordis channel directly (no threads)
-  if (
-    ordisWebhookConfig &&
-    event.project_id === ordisWebhookConfig.controlPlaneProjectId
-  ) {
-    await postToOrdisChannel(fromAlias, body);
-    return;
   }
 
   const thread = await relayToDiscord(fromAlias, body, event, channel, webhook, sessionMap);
