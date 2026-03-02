@@ -101,7 +101,7 @@ async function handleChatMessage(
     for (const delay of [0, 500, 1500]) {
       if (delay > 0) await new Promise((r) => setTimeout(r, delay));
       try {
-        const msgs = await getSessionMessagesWithKey(event.session_id, cpApiKey, 5);
+        const msgs = await getSessionMessagesWithKey(event.session_id, cpApiKey, 200);
         const target = msgs.find((m) => m.message_id === event.message_id);
         if (target) {
           msgBody = target.body;
