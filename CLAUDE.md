@@ -25,7 +25,7 @@ The following three agents are the **permanent team** across ALL BeadHub project
 
 | Alias | Role | Description |
 |-------|------|-------------|
-| **ordis** | coordinator | Global orchestrator (Remote Control pod). Plans, assigns, reviews, unblocks. Reachable via Discord and Claude Code Remote Control. |
+| **ordis** | coordinator | Global orchestrator (control-plane pod). Plans, assigns, reviews, unblocks. Reachable via Discord `#ordis` channel. |
 | **neo** | developer | Worker agent. Implements features, fixes bugs, submits PRs. |
 | **hawk** | reviewer | QA/review agent. Reviews PRs, checks security, test coverage, code quality. |
 
@@ -132,25 +132,47 @@ bdh ready      # start working
 
 ## Infrastructure Architecture
 
+### Control-Plane Project (BeadHub)
+
+ordis operates from a **central control-plane project** in BeadHub (`control-plane` slug). This project is project-agnostic — it serves as ordis's inbox and coordination hub across ALL projects. The architecture documentation is tracked in bead `beadhub-50q`.
+
+**This repo (`hq-beadhub`) is ordis's central knowledge base.** All architecture decisions, beads/tickets, and coordination docs live here. ordis should always reference beads in this repo for context on the overall system.
+
+- **Project slug:** `control-plane`
+- **Project ID:** `57dc7ce5-4722-480e-a92c-a29b50ef41bb`
+- **Discord channel:** `#ordis` (ID: `1478072914543775824`)
+
 ### Orchestrator Deployment (K8s)
 
-ordis (the coordinator) runs as a **Deployment** in the `beadhub` namespace on a Raspberry Pi 5 (k3s). It uses **Claude Code Remote Control** — a persistent interactive session that the human connects to from the Claude mobile app.
+ordis (the coordinator) runs as a **Deployment** in the `beadhub` namespace on a Raspberry Pi 5 (k3s). It uses a **message watcher** that detects pending BeadHub chat messages and processes them with `claude -p`.
 
 ```
-Human ↔ Claude Code Remote Control (phone app) ↔ ordis pod
-Human ↔ Discord → discord-bridge → ordis pod
-Agent-to-agent chatter → bdh chat → Discord (visibility only)
+Human ↔ Discord #ordis channel → discord-bridge → BeadHub chat (control-plane)
+                                                          ↓
+                                              message-watcher detects pending
+                                                          ↓
+                                              claude -p --resume processes message
+                                                          ↓  (PostToolUse hooks)
+                                                          ├── bdh :notify (catches new messages)
+                                                          └── discord-status.sh (posts activity to Discord)
+                                                          ↓
+                                              response via bdh :aweb chat → bridge → Discord
 ```
 
-**The ordis pod runs `claude remote-control`, NOT a dispatcher or `claude -p`.** The entrypoint:
-1. Sets up git auth and copies CLAUDE.md from the mounted ConfigMap
-2. Runs `bdh :init --alias ordis --role coordinator` for each project
-3. Starts `claude remote-control --dangerously-skip-permissions` — the human connects from the Claude mobile app
-4. The session persists as long as the pod is running
+**The ordis pod runs a message watcher + `claude -p`, NOT `claude remote-control`.** The entrypoint:
+1. Sets up git auth, `bdh :init` for the control-plane project
+2. Loops: checks `bdh :aweb chat pending` for incoming messages
+3. When a message is pending, kicks `claude -p "Check pending messages" --resume <session>`
+4. Claude processes the message, `bdh :notify` hook catches new messages mid-task
+5. `discord-status.sh` hook posts real-time tool activity to Discord
 
-**Important:** The agent image must use the native Claude Code install (`claude install`), not the npm package. The npm version fails with `node: bad option: --sdk-url` when running `claude remote-control`.
+**Authentication:**
+- `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (1-year validity, no refresh needed)
+- No credentials.json, no oauth-refresh sidecar, no init container
 
-Worker communication happens via `bdh :aweb chat` — ordis checks for pending messages proactively via the notify hook. Discord shows inter-agent chatter for visibility. ordis is reachable from both Discord and Claude Code Remote Control.
+**Claude Code hooks** (settings.json):
+- `bdh :notify` — PostToolUse hook, checks for new BeadHub chat messages after every tool use
+- `discord-status.sh` — PostToolUse hook, posts tool activity to Discord (deterministic, 100% reliable)
 
 ### CRITICAL: Do Not Modify the Orchestrator Deployment
 
@@ -162,27 +184,6 @@ Worker communication happens via `bdh :aweb chat` — ordis checks for pending m
 - Agents must NEVER `kubectl patch/apply/edit` the `orchestrator` Deployment directly
 - Agents CAN create/modify Jobs (workers), ConfigMaps, and other resources freely
 - If the orchestrator pod is not responding, check: `kubectl logs deployment/orchestrator -n beadhub`
-
-### Recovery Procedure
-
-If the orchestrator Remote Control session is broken:
-
-```bash
-# 1. Check if remote-control is running
-kubectl logs deployment/orchestrator -n beadhub --tail=5
-
-# 2. If not, force restore from Git
-cd ~/Code/DevOps/homelab-k8s
-git pull
-kubectl replace -f manifests/platform/beadhub/orchestrator.yaml --force
-
-# 3. If ArgoCD overrides with stale state, force sync
-kubectl -n argocd patch app beadhub --type merge \
-  -p '{"operation":{"sync":{"revision":"HEAD","prune":true,"syncStrategy":{"apply":{"force":true}}}}}'
-
-# 4. Verify — look for Remote Control session URL
-kubectl logs deployment/orchestrator -n beadhub --tail=10
-```
 
 ### Related Repos
 
@@ -206,9 +207,10 @@ This repo is a fork of `beadhub/beadhub`, but **the `upstream` remote has been i
 ### Discord Bridge
 
 Source: `discord-bridge/src/` in this repo. Key files:
-- `discord-listener.ts` — Routes Discord messages: new threads → ordis (Redis), existing BeadHub threads → BeadHub API
-- `orchestrator-relay.ts` — BLPOPs `orchestrator:outbox`, posts responses to Discord threads
-- `session-map.ts` — Maps Discord thread IDs ↔ Claude session UUIDs with source tracking ("beadhub" vs "ordis")
+- `discord-listener.ts` — Routes Discord messages: `#ordis` channel → BeadHub chat (control-plane project), existing BeadHub threads → BeadHub API
+- `redis-listener.ts` — Subscribes to Redis events, posts agent responses to Discord
+- `session-map.ts` — Maps Discord thread IDs ↔ Claude session UUIDs with source tracking ("beadhub" vs "ai")
+- `beadhub-client.ts` — BeadHub API client (HMAC + Bearer auth, chat, admin endpoints)
 
 ### Agent Image
 
