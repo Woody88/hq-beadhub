@@ -206,16 +206,30 @@ This repo is a fork of `beadhub/beadhub`, but **the `upstream` remote has been i
 
 ### Discord Bridge
 
-Source: `discord-bridge/src/` in this repo. Key files:
-- `discord-listener.ts` — Routes Discord messages: `#ordis` channel → BeadHub chat (control-plane project), existing BeadHub threads → BeadHub API
-- `redis-listener.ts` — Subscribes to Redis events, posts agent responses to Discord
-- `session-map.ts` — Maps Discord thread IDs ↔ Claude session UUIDs with source tracking ("beadhub" vs "ai")
-- `beadhub-client.ts` — BeadHub API client (HMAC + Bearer auth, chat, admin endpoints)
+Source: `discord-bridge/src/` in this repo. Published to `ghcr.io/woody88/discord-bridge:latest`.
+
+Key files:
+- `config.ts` — All env var configuration. Includes ordis channel (`DISCORD_ORDIS_CHANNEL_ID`, `DISCORD_ORDIS_WEBHOOK_URL`) and control-plane (`CONTROL_PLANE_API_KEY`, `CONTROL_PLANE_PROJECT_ID`)
+- `discord-listener.ts` — Routes Discord messages. `#ordis` channel messages (flat, no threads) → BeadHub control-plane chat via `createOrSendChat()`. Thread messages → existing BeadHub sessions or orchestrator chat
+- `redis-listener.ts` — Subscribes to Redis `events:*`. Control-plane project messages → posts to `#ordis` channel directly via webhook (flat, no threads). Other project messages → creates/uses Discord threads
+- `beadhub-client.ts` — BeadHub API client. `createOrSendChat()` accepts optional `apiKeyOverride` for control-plane routing
+- `session-map.ts` — Maps Discord thread IDs ↔ BeadHub session IDs with source tracking ("beadhub" | "orchestrator" | "ai")
+
+**Routing summary:**
+- `#ordis` channel → control-plane project (flat conversation, uses `CONTROL_PLANE_API_KEY` for a `discord-bridge` identity registered in the control-plane project)
+- `#agent-comms` threads → hq-beadhub project (uses `BEADHUB_API_KEY`)
+- `#ai` threads → ai:inbox Redis list (for AI dispatcher)
+- Control-plane responses → `#ordis` channel via ordis webhook (no threads)
+- Other project responses → `#agent-comms` threads
 
 ### Agent Image
 
 Dockerfile: `agent-image/Dockerfile` in this repo. Published to `ghcr.io/woody88/claude-agent:latest`. Contains:
 - Node.js 22, npm, Claude Code CLI, kubectl, gh, bd, bdh, dolt, wrangler
+
+Scripts (in `agent-image/`, mounted via ConfigMap in K8s — not baked into image):
+- `message-watcher.sh` — Orchestrator entrypoint: `bdh :init` → post online message → poll `bdh :aweb chat pending` → kick `claude -p --resume`
+- `discord-status.sh` — PostToolUse hook: rate-limited (5s), posts tool activity to `#ordis` via webhook
 
 <!-- BEADHUB:START -->
 ## BeadHub Coordination Rules
