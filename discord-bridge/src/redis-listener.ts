@@ -90,9 +90,10 @@ async function handleChatMessage(
     ordisWebhookConfig &&
     event.project_id === ordisWebhookConfig.controlPlaneProjectId
   ) {
-    // Fetch message body using HMAC auth with the control-plane project ID (with retry for race condition)
-    let msgBody = event.preview;
-    for (const delay of [0, 500, 1500]) {
+    // Fetch message body using HMAC auth with the control-plane project ID (with retry for race condition).
+    // Retries use increasing backoff; if all fail we skip posting rather than sending truncated preview.
+    let msgBody: string | null = null;
+    for (const delay of [0, 500, 1500, 3000, 5000]) {
       if (delay > 0) await new Promise((r) => setTimeout(r, delay));
       try {
         const msgs = await getSessionMessages(event.session_id, 2000, ordisWebhookConfig.controlPlaneProjectId);
@@ -104,6 +105,13 @@ async function handleChatMessage(
       } catch (err) {
         console.warn(`[bridge] Error fetching control-plane message: ${err}`);
       }
+    }
+
+    if (msgBody === null) {
+      console.warn(
+        `[bridge] Could not fetch full body for message ${event.message_id} after all retries — skipping post to avoid truncation`,
+      );
+      return;
     }
 
     await postToOrdisChannel(event.from_alias, msgBody);
