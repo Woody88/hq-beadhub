@@ -95,7 +95,7 @@ async function handleChatMessage(
     for (const delay of [0, 500, 1500]) {
       if (delay > 0) await new Promise((r) => setTimeout(r, delay));
       try {
-        const msgs = await getSessionMessages(event.session_id, 200, ordisWebhookConfig.controlPlaneProjectId);
+        const msgs = await getSessionMessages(event.session_id, 2000, ordisWebhookConfig.controlPlaneProjectId);
         const target = msgs.find((m) => m.message_id === event.message_id);
         if (target) {
           msgBody = target.body;
