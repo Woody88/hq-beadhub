@@ -18,8 +18,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      image_tag: ${{ steps.extract_tag.outputs.image_tag }}
 
     steps:
       - name: Checkout
@@ -59,32 +57,12 @@ jobs:
           cache-from: type=gha,scope=ai-dispatcher
           cache-to: type=gha,mode=max,scope=ai-dispatcher
 
-      - name: Extract image tag
-        id: extract_tag
+      - name: Dispatch image update to homelab-k8s
         run: |
-          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep 'sha-' | head -1 | cut -d: -f2)
-          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
-
-  patch-manifest:
-    name: Patch homelab-k8s Manifest
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    permissions:
-      contents: read
-
-    steps:
-      - name: Clone homelab-k8s
-        run: |
-          git clone https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/Woody88/homelab-k8s.git homelab-k8s
-          cd homelab-k8s
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-
-      - name: Patch manifest and push
-        run: |
-          cd homelab-k8s
-          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
-          sed -i "s|ghcr.io/woody88/ai-dispatcher:.*|ghcr.io/woody88/ai-dispatcher:${IMAGE_TAG}|g" manifests/platform/beadhub/ai-dispatcher.yaml
-          git add manifests/platform/beadhub/ai-dispatcher.yaml
-          git diff --cached --quiet && echo "No changes to commit" || \
-            git commit -m "chore: update ai-dispatcher image to ${IMAGE_TAG}" && git push
+          gh api repos/Woody88/homelab-k8s/dispatches \
+            -f event_type=image_updated \
+            -f "client_payload[image]=ghcr.io/woody88/ai-dispatcher" \
+            -f "client_payload[tag]=$(echo '${{ steps.meta.outputs.tags }}' | grep 'sha-' | head -1 | cut -d: -f2)" \
+            -f "client_payload[manifest]=manifests/platform/beadhub/ai-dispatcher.yaml"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
