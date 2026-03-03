@@ -28,6 +28,38 @@ export async function startOrchestratorRelay(
     console.error("[agent-relay] Redis error:", err.message);
   });
 
+  // On startup: discard messages older than 5 minutes to prevent flooding Discord after a restart.
+  const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+  for (const queue of [ORCHESTRATOR_OUTBOX, AGENT_OUTBOX]) {
+    try {
+      const items = await redis.lrange(queue, 0, -1);
+      if (items.length === 0) continue;
+      const cutoff = Date.now() - STALE_THRESHOLD_MS;
+      let staleCount = 0;
+      for (const item of items) {
+        try {
+          const parsed = JSON.parse(item) as { timestamp?: string };
+          const ts = parsed.timestamp ? new Date(parsed.timestamp).getTime() : 0;
+          if (ts < cutoff) {
+            staleCount++;
+          } else {
+            break; // Queue is FIFO; first fresh message means the rest are also fresh
+          }
+        } catch {
+          staleCount++; // Unparseable — treat as stale and discard
+        }
+      }
+      if (staleCount > 0) {
+        await redis.ltrim(queue, staleCount, -1);
+        console.warn(
+          `[agent-relay] Startup purge: discarded ${staleCount}/${items.length} stale messages from ${queue}`,
+        );
+      }
+    } catch (err) {
+      console.warn(`[agent-relay] Could not purge stale messages from ${queue}:`, err);
+    }
+  }
+
   console.log(
     `[agent-relay] Starting BLPOP loop on [${ORCHESTRATOR_OUTBOX}, ${AGENT_OUTBOX}]`,
   );
@@ -35,16 +67,25 @@ export async function startOrchestratorRelay(
   // Run in background — don't block startup
   (async () => {
     while (true) {
+      // Separate BLPOP errors (connection loss) from send errors so a transient Discord API
+      // failure does not permanently stall the loop.
+      let result: [string, string] | null;
       try {
-        const result = await blpopRedis.blpop(ORCHESTRATOR_OUTBOX, AGENT_OUTBOX, 0);
-        if (!result) continue;
-
-        const [key, raw] = result;
-        await handleOutboxMessage(key, raw, channel, webhook, client);
+        result = await blpopRedis.blpop(ORCHESTRATOR_OUTBOX, AGENT_OUTBOX, 0);
       } catch (err) {
         console.error("[agent-relay] BLPOP error:", err);
         // Brief pause before retrying on connection errors
         await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      if (!result) continue;
+
+      const [key, raw] = result;
+      try {
+        await handleOutboxMessage(key, raw, channel, webhook, client);
+      } catch (err) {
+        console.error(`[agent-relay] Failed to handle outbox message from ${key} — skipping:`, err);
       }
     }
   })();
