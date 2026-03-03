@@ -3,7 +3,7 @@ import type { TextChannel, ThreadChannel, WebhookClient } from "discord.js";
 import type { BeadHubEvent, ChatMessageEvent } from "./types.js";
 import type { SessionMap } from "./session-map.js";
 import { config } from "./config.js";
-import { getSessionMessages, getSessionMessagesWithKey, getProjectRepos } from "./beadhub-client.js";
+import { getSessionMessages, getProjectRepos } from "./beadhub-client.js";
 import { getOrCreateThread, sendAsAgent } from "./discord-sender.js";
 import { stopTypingIndicator } from "./discord-listener.js";
 
@@ -85,23 +85,17 @@ async function handleChatMessage(
   if (wasRelayed(event.message_id)) return;
   markRelayed(event.message_id, echoTtlMs);
 
-  // Control-plane messages → use dedicated Bearer API key (HMAC doesn't resolve cross-project)
+  // Control-plane messages → post to #ordis channel (flat, no thread)
   if (
     ordisWebhookConfig &&
     event.project_id === ordisWebhookConfig.controlPlaneProjectId
   ) {
-    const cpApiKey = config.controlPlane.apiKey;
-    if (!cpApiKey) {
-      console.warn(`[bridge] CONTROL_PLANE_API_KEY not set — cannot relay ordis message`);
-      return;
-    }
-
-    // Fetch message body using control-plane Bearer auth (with retry for race condition)
+    // Fetch message body using HMAC auth with the control-plane project ID (with retry for race condition)
     let msgBody = event.preview;
     for (const delay of [0, 500, 1500]) {
       if (delay > 0) await new Promise((r) => setTimeout(r, delay));
       try {
-        const msgs = await getSessionMessagesWithKey(event.session_id, cpApiKey, 200);
+        const msgs = await getSessionMessages(event.session_id, 200, ordisWebhookConfig.controlPlaneProjectId);
         const target = msgs.find((m) => m.message_id === event.message_id);
         if (target) {
           msgBody = target.body;
