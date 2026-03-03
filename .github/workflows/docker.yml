@@ -22,6 +22,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image_tag: ${{ steps.extract_tag.outputs.image_tag }}
 
     steps:
       - name: Checkout
@@ -59,3 +61,33 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=hq-beadhub
           cache-to: type=gha,mode=max,scope=hq-beadhub
+
+      - name: Extract image tag
+        id: extract_tag
+        run: |
+          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep 'sha-' | head -1 | cut -d: -f2)
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  patch-manifest:
+    name: Patch homelab-k8s Manifest
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: read
+
+    steps:
+      - name: Clone homelab-k8s
+        run: |
+          git clone https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/Woody88/homelab-k8s.git homelab-k8s
+          cd homelab-k8s
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      - name: Patch manifest and push
+        run: |
+          cd homelab-k8s
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          sed -i "s|ghcr.io/woody88/hq-beadhub:.*|ghcr.io/woody88/hq-beadhub:${IMAGE_TAG}|g" manifests/platform/beadhub/api.yaml
+          git add manifests/platform/beadhub/api.yaml
+          git diff --cached --quiet && echo "No changes to commit" || \
+            git commit -m "chore: update hq-beadhub image to ${IMAGE_TAG}" && git push
