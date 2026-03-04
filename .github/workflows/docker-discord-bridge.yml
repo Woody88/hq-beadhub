@@ -67,6 +67,8 @@ jobs:
   update-manifest:
     needs: build-and-push
     uses: Woody88/homelab-k8s/.github/workflows/image-updater.yml@main
+    secrets:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
     with:
       image: ghcr.io/woody88/discord-bridge
       tag: ${{ needs.build-and-push.outputs.tag }}
