@@ -1,5 +1,6 @@
 import type Redis from "ioredis";
-import type { TextChannel, ThreadChannel, WebhookClient } from "discord.js";
+import { WebhookClient } from "discord.js";
+import type { TextChannel, ThreadChannel } from "discord.js";
 import type { BeadHubEvent, ChatMessageEvent } from "./types.js";
 import type { SessionMap } from "./session-map.js";
 import { config } from "./config.js";
@@ -37,9 +38,19 @@ export interface OrdisWebhookConfig {
 }
 
 let ordisWebhookConfig: OrdisWebhookConfig | null = null;
+let cachedOrdisWebhook: WebhookClient | null = null;
 
 export function setOrdisWebhookConfig(cfg: OrdisWebhookConfig): void {
   ordisWebhookConfig = cfg;
+  cachedOrdisWebhook = null; // reset cache on reconfigure
+}
+
+function getOrdisWebhook(): WebhookClient | null {
+  if (!ordisWebhookConfig) return null;
+  if (!cachedOrdisWebhook) {
+    cachedOrdisWebhook = new WebhookClient({ url: ordisWebhookConfig.webhookUrl });
+  }
+  return cachedOrdisWebhook;
 }
 
 export async function startRedisListener(
@@ -163,7 +174,10 @@ async function handleChatMessage(
     const thread = await getOrReuseOrdisThread(event, msgBody, ordisChannel, sessionMap, cmdRedis);
     if (!thread) return;
 
-    await sendAsAgent(webhook, thread, fromAlias, msgBody);
+    // Worker messages go to #ordis threads — must use the ordis webhook (not
+    // the #agent-comms webhook) or Discord returns 10003 Unknown Channel.
+    const ordisWebhook = getOrdisWebhook() ?? webhook;
+    await sendAsAgent(ordisWebhook, thread, fromAlias, msgBody);
     console.log(
       `[bridge] ${fromAlias} → ordis activity thread "${thread.name}": ${msgBody.slice(0, 80)}`,
     );
