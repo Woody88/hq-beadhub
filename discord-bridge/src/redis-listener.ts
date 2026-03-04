@@ -90,10 +90,17 @@ async function handleChatMessage(
   if (wasRelayed(event.message_id)) return;
   markRelayed(event.message_id, echoTtlMs);
 
-  // Human sessions involve the bridge alias (discord-bridge) as sender or recipient.
-  // Agent-only sessions (ordis ↔ neo, etc.) have no bridge participant.
+  // Human sessions have an `ordis:thread:{sessionId}` key set by discord-listener
+  // when the human sends a message to #ordis. Agent-only sessions (ordis ↔ neo, etc.)
+  // never have this key. BeadHub events don't populate to_aliases reliably, so we
+  // can't use the bridge alias check alone.
+  const isHumanSession =
+    ordisWebhookConfig !== null &&
+    (await cmdRedis.exists(`ordis:thread:${event.session_id}`)) === 1;
   const involvesHuman =
-    event.from_alias === bridgeAlias || event.to_aliases.includes(bridgeAlias);
+    isHumanSession ||
+    event.from_alias === bridgeAlias ||
+    event.to_aliases.includes(bridgeAlias);
 
   // Fetch message body — use HMAC (project-scoped) for all sessions.
   let fromAlias: string | null = event.from_alias || null;
