@@ -44,6 +44,16 @@ The following three agents are the **permanent team** across ALL BeadHub project
 6. neo submits PR on completion
 7. hawk reviews the PR, approves or requests changes
 
+### Worker Communication Policy
+
+**ordis MUST include these instructions in every task assignment to neo or hawk:**
+
+- Use `bdh :aweb chat send-and-wait <alias> "msg" --start-conversation` for ALL coordination during implementation: progress updates, design questions, blocker escalations, and decisions that need sign-off.
+- Use `bdh :aweb mail send ordis "msg"` ONLY for the final handoff (e.g., "PR #123 is open — summary of changes").
+- Do NOT use PR comments, commit messages, or issue updates as the primary communication channel with other agents.
+
+**Why:** Discord-bridge creates a thread for every bdh chat session involving a worker, so Woodson can observe agent conversations and intervene when needed. Mail is fire-and-forget and not surfaced in Discord; it is only appropriate for terminal notifications (handoffs).
+
 ### Key Tools
 - **`bdh`** — Beads CLI (git-native issue tracking)
 - **`bdh`** — BeadHub CLI (coordination, chat, locks, presence)
