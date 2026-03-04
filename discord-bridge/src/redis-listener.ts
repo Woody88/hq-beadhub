@@ -122,7 +122,7 @@ async function handleChatMessage(
     // Use the body included in the event payload (available since beadhub-a3g).
     // Fall back to an API fetch with backoff for older server versions that omit it.
     let fromAlias: string | null = event.from_alias || null;
-    let msgBody: string | null = event.body ?? null;
+    let msgBody: string | null = event.body || null;
 
     if (msgBody === null) {
       for (const delay of [0, 500, 1500, 3000, 5000]) {
@@ -173,7 +173,7 @@ async function handleChatMessage(
   ) {
     // Use the body included in the event payload (available since beadhub-a3g).
     // Fall back to API fetch with backoff for older server versions that omit it.
-    let msgBody: string | null = event.body ?? null;
+    let msgBody: string | null = event.body || null;
 
     if (msgBody === null) {
       for (const delay of [0, 500, 1500, 3000, 5000]) {
