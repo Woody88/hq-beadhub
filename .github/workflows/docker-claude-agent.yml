@@ -66,3 +66,4 @@ jobs:
             -f "client_payload[manifest]=manifests/platform/beadhub/orchestrator.yaml"
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+

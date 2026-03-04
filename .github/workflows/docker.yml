@@ -68,3 +68,4 @@ jobs:
             -f "client_payload[manifest]=manifests/platform/beadhub/api.yaml"
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+

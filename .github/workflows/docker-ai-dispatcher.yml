@@ -65,3 +65,4 @@ jobs:
             -f "client_payload[manifest]=manifests/platform/beadhub/ai-dispatcher.yaml"
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+

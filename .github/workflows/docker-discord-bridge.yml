@@ -66,3 +66,4 @@ jobs:
             -f "client_payload[manifest]=manifests/platform/beadhub/discord-bridge.yaml"
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
