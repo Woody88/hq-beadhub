@@ -153,6 +153,7 @@ async function handleChatMessage(
       msgBody,
       ordisChannel,
       sessionMap,
+      cmdRedis,
     );
     if (!thread) return;
 
@@ -221,8 +222,11 @@ const AGENT_EMOJIS: Record<string, string> = {
  * Get or create a Discord thread in #ordis for a worker chat session.
  *
  * On the first message for a session:
- *  1. Posts "🤖 Spinning up <worker> — <bead-id>" to the ordis webhook.
- *  2. Creates a Discord thread on that spin-up message.
+ *  1. Reuses the active ordis placeholder message (if one exists) as the thread
+ *     anchor — avoids posting a separate "🤖 Spinning up" message and hitting
+ *     Discord's one-thread-per-message limit conflict with the activity thread.
+ *     Falls back to posting a new spin-up message when no placeholder is active.
+ *  2. Creates a Discord thread on that message.
  *  3. Stores session_id ↔ thread_id in the session map.
  *
  * On subsequent messages the existing thread is fetched and unarchived if needed.
@@ -232,6 +236,7 @@ async function getOrCreateWorkerThread(
   body: string,
   ordisChannel: TextChannel,
   sessionMap: SessionMap,
+  redis: Redis,
 ): Promise<ThreadChannel | null> {
   if (!ordisWebhookConfig) return null;
 
@@ -257,27 +262,41 @@ async function getOrCreateWorkerThread(
     ? `${workerAlias} — ${beadId}`
     : `${workerAlias} — new session`;
 
-  // Post the spin-up message to #ordis via the ordis webhook
-  const spinupResp = await fetch(`${ordisWebhookConfig.webhookUrl}?wait=true`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      username: `${AGENT_EMOJIS.ordis} ordis`,
-      content: `🤖 Spinning up ${spinupLabel}`,
-    }),
-  });
-
-  if (!spinupResp.ok) {
-    console.error(
-      `[bridge] Failed to post worker spin-up message to #ordis: ${spinupResp.status}`,
-    );
-    return null;
+  // Reuse the active ordis placeholder as the thread anchor if one exists.
+  // This avoids a separate spin-up message in #ordis — one message, one thread.
+  let spinupMsgId: string;
+  const latestPlaceholder = await redis.get("ordis:latest_placeholder");
+  if (latestPlaceholder) {
+    await redis.del("ordis:latest_placeholder");
+    spinupMsgId = latestPlaceholder;
+    // Update the placeholder text to reflect what's spinning up
+    await fetch(`${ordisWebhookConfig.webhookUrl}/messages/${spinupMsgId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: `🤖 Spinning up ${spinupLabel}...` }),
+    });
+    console.log(`[bridge] Reusing ordis placeholder ${spinupMsgId} as worker thread anchor`);
+  } else {
+    // No active placeholder — post a new spin-up message
+    const spinupResp = await fetch(`${ordisWebhookConfig.webhookUrl}?wait=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: `${AGENT_EMOJIS.ordis} ordis`,
+        content: `🤖 Spinning up ${spinupLabel}`,
+      }),
+    });
+    if (!spinupResp.ok) {
+      console.error(
+        `[bridge] Failed to post worker spin-up message to #ordis: ${spinupResp.status}`,
+      );
+      return null;
+    }
+    const spinupData = await spinupResp.json() as { id: string };
+    spinupMsgId = spinupData.id;
   }
 
-  const spinupData = await spinupResp.json() as { id: string };
-  const spinupMsgId = spinupData.id;
-
-  // Fetch the posted message so we can start a thread on it
+  // Fetch the message so we can start a thread on it
   const spinupMsg = await ordisChannel.messages.fetch(spinupMsgId);
 
   // Thread name: "neo — hq-beadhub-295" (max 100 chars)
@@ -292,7 +311,7 @@ async function getOrCreateWorkerThread(
   await sessionMap.setWithSource(event.session_id, thread.id, "beadhub");
 
   console.log(
-    `[bridge] Worker spin-up thread "${threadName}" created for session ${event.session_id.slice(0, 8)}...`,
+    `[bridge] Worker thread "${threadName}" created for session ${event.session_id.slice(0, 8)}...`,
   );
   return thread;
 }

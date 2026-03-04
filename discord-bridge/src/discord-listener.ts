@@ -1,4 +1,4 @@
-import type { Client, Message, PartialMessage, TextChannel, ThreadChannel } from "discord.js";
+import type { Client, Message, PartialMessage, ThreadChannel } from "discord.js";
 import { ChannelType, MessageFlags } from "discord.js";
 import type Redis from "ioredis";
 import type { SessionMap } from "./session-map.js";
@@ -157,8 +157,7 @@ async function handleMessage(
 
     if (result?.sessionId && config.discord.ordisWebhookUrl && redisRef) {
       try {
-        // 1. Post a placeholder message in the main channel via webhook (wait=true
-        //    returns the message object so we can get its ID).
+        // Post a placeholder message via webhook — edited in-place when ordis responds.
         const placeholderResp = await fetch(
           `${config.discord.ordisWebhookUrl}?wait=true`,
           {
@@ -176,27 +175,20 @@ async function handleMessage(
         const placeholderData = await placeholderResp.json() as { id: string };
         const placeholderMsgId = placeholderData.id;
 
-        // 2. Create activity thread on the placeholder message (not the user's
-        //    message) so the user is not subscribed and it stays off their sidebar.
-        const channel = message.channel as TextChannel;
-        const placeholderMsg = await channel.messages.fetch(placeholderMsgId);
-        const thread = await placeholderMsg.startThread({
-          name: "ordis activity",
-          autoArchiveDuration: 60,
-        });
-
-        // 3. Store session state in Redis (1-hour TTL).
-        await redisRef.set(`ordis:thread:${result.sessionId}`, thread.id, "EX", 3600);
+        // Store session state in Redis (1-hour TTL).
         await redisRef.set(`ordis:placeholder:${result.sessionId}`, placeholderMsgId, "EX", 3600);
         await redisRef.set(`ordis:user:${result.sessionId}`, userId, "EX", 3600);
-        // Reverse mapping: thread → session (for outbox attachment handling)
-        await redisRef.set(`ordis:thread_to_session:${thread.id}`, result.sessionId, "EX", 3600);
+        // Make the placeholder available for worker thread creation (5-min TTL).
+        // When a worker chat session starts, the bridge reuses this message as the
+        // chat thread anchor instead of posting a separate spin-up message — avoiding
+        // the one-thread-per-message Discord limit conflict with an activity thread.
+        await redisRef.set("ordis:latest_placeholder", placeholderMsgId, "EX", 300);
 
         console.log(
-          `[discord->ordis] Placeholder ${placeholderMsgId}, activity thread ${thread.id} for session ${result.sessionId.slice(0, 8)}...`,
+          `[discord->ordis] Placeholder ${placeholderMsgId} for session ${result.sessionId.slice(0, 8)}...`,
         );
       } catch (err) {
-        console.warn(`[discord->ordis] Failed to create placeholder/thread:`, err);
+        console.warn(`[discord->ordis] Failed to create placeholder:`, err);
       }
     }
 
