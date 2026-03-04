@@ -114,7 +114,7 @@ async function handleChatMessage(
       return;
     }
 
-    await postToOrdisChannel(event.from_alias, msgBody);
+    await postToOrdisChannel(event.from_alias, msgBody, cmdRedis, event.session_id);
     return;
   }
 
@@ -160,26 +160,82 @@ const AGENT_EMOJIS: Record<string, string> = {
 };
 
 /**
- * Post a message to the #ordis Discord channel via webhook.
- * Used for control-plane project messages — flat conversation, no threads.
+ * Deliver an ordis response to the #ordis Discord channel.
+ *
+ * When a placeholder message exists for the session (created when the user sent
+ * their message), this EDITS that placeholder with the response text plus a
+ * <@userId> mention so Discord notifies the user even through an edit.
+ * Overflow chunks beyond the first are posted as new messages.
+ *
+ * Falls back to posting a new message when no placeholder is found.
  */
-async function postToOrdisChannel(fromAlias: string, body: string): Promise<void> {
+async function postToOrdisChannel(
+  fromAlias: string,
+  body: string,
+  redis: Redis,
+  sessionId: string,
+): Promise<void> {
   if (!ordisWebhookConfig) return;
 
-  const emoji = AGENT_EMOJIS[fromAlias] ?? "🤖";
-  const username = `${emoji} ${fromAlias}`;
+  const placeholderMsgId = await redis.get(`ordis:placeholder:${sessionId}`);
+  const userId = await redis.get(`ordis:user:${sessionId}`);
+  const mention = userId ? `\n<@${userId}>` : "";
 
-  // Split long messages for Discord's 2000-char limit
-  const chunks = splitMessage(body, config.maxDiscordMessageLength);
-  for (const chunk of chunks) {
-    await fetch(ordisWebhookConfig.webhookUrl, {
-      method: "POST",
+  if (placeholderMsgId) {
+    // --- Placeholder edit path ---
+    // Reserve enough room for the mention on the last chunk.
+    const maxBodyLen = config.maxDiscordMessageLength - mention.length;
+    const bodyChunks = body.trim() ? splitMessage(body, maxBodyLen) : [];
+
+    // Build the content for the placeholder edit (first or only chunk + mention).
+    let editContent: string;
+    if (bodyChunks.length === 0) {
+      // Attachment-only or empty response — just the mention (or a fallback).
+      editContent = mention.trimStart() || "✅";
+    } else if (bodyChunks.length === 1) {
+      editContent = bodyChunks[0] + mention;
+    } else {
+      editContent = bodyChunks[0];
+    }
+
+    await fetch(`${ordisWebhookConfig.webhookUrl}/messages/${placeholderMsgId}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, content: chunk }),
+      body: JSON.stringify({ content: editContent }),
     });
+
+    // Post any overflow chunks as new messages (mention on the last one).
+    if (bodyChunks.length > 1) {
+      const emoji = AGENT_EMOJIS[fromAlias] ?? "🤖";
+      const username = `${emoji} ${fromAlias}`;
+      for (let i = 1; i < bodyChunks.length; i++) {
+        const isLast = i === bodyChunks.length - 1;
+        const content = isLast ? bodyChunks[i] + mention : bodyChunks[i];
+        await fetch(ordisWebhookConfig.webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, content }),
+        });
+      }
+    }
+
+    // Remove the placeholder key — it's been consumed.
+    await redis.del(`ordis:placeholder:${sessionId}`);
+  } else {
+    // --- Fallback: post as a new message (no placeholder found) ---
+    const emoji = AGENT_EMOJIS[fromAlias] ?? "🤖";
+    const username = `${emoji} ${fromAlias}`;
+    const chunks = splitMessage(body, config.maxDiscordMessageLength);
+    for (const chunk of chunks) {
+      await fetch(ordisWebhookConfig.webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, content: chunk }),
+      });
+    }
   }
 
-  // Stop typing indicator on the ordis channel
+  // Stop typing indicator on the ordis channel.
   if (config.discord.ordisChannelId) {
     stopTypingIndicator(config.discord.ordisChannelId);
   }

@@ -1,8 +1,9 @@
 import type Redis from "ioredis";
 import type { Client, WebhookClient, TextChannel } from "discord.js";
-import type { OrchestratorOutboxMessage, AgentOutboxMessage } from "./types.js";
-import { sendAsAgent } from "./discord-sender.js";
+import type { OrchestratorOutboxMessage, AgentOutboxMessage, AgentAttachment } from "./types.js";
+import { sendAsAgent, buildAttachments } from "./discord-sender.js";
 import { stopTypingIndicator } from "./discord-listener.js";
+import { config } from "./config.js";
 
 const ORCHESTRATOR_OUTBOX = "orchestrator:outbox";
 const AGENT_OUTBOX = "agent:outbox";
@@ -83,7 +84,7 @@ export async function startOrchestratorRelay(
 
       const [key, raw] = result;
       try {
-        await handleOutboxMessage(key, raw, channel, webhook, client);
+        await handleOutboxMessage(key, raw, channel, webhook, client, redis);
       } catch (err) {
         console.error(`[agent-relay] Failed to handle outbox message from ${key} — skipping:`, err);
       }
@@ -97,6 +98,7 @@ async function handleOutboxMessage(
   channel: TextChannel,
   webhook: WebhookClient,
   client: Client,
+  redis: Redis,
 ): Promise<void> {
   let msg: OrchestratorOutboxMessage | AgentOutboxMessage;
   try {
@@ -121,6 +123,25 @@ async function handleOutboxMessage(
 
   // Stop typing indicator — response has arrived
   stopTypingIndicator(thread_id);
+
+  // Check if this thread belongs to an ordis session.
+  // If so, edit the placeholder in the main #ordis channel and send attachments
+  // as a follow-up there rather than posting inside the activity thread.
+  const ordisSessionId = await redis.get(`ordis:thread_to_session:${thread_id}`);
+  if (ordisSessionId && config.discord.ordisChannelId && config.discord.ordisWebhookUrl) {
+    await handleOrdisOutboxMessage(
+      ordisSessionId,
+      response,
+      attachments,
+      redis,
+      client,
+    );
+    const attachmentCount = attachments?.length ?? 0;
+    console.log(
+      `[${fromAlias}->ordis] Response (${response.length} chars, ${attachmentCount} attachments) via placeholder edit`,
+    );
+    return;
+  }
 
   // Fetch the thread
   let thread;
@@ -147,4 +168,52 @@ async function handleOutboxMessage(
   console.log(
     `[${fromAlias}->discord] Response (${response.length} chars, ${attachmentCount} attachments) → thread ${thread.name ?? thread_id}`,
   );
+}
+
+/**
+ * Handle a final ordis response that arrived via the agent outbox.
+ * Edits the placeholder message in the main #ordis channel with the response
+ * text and a <@userId> mention, then sends any file attachments as a follow-up
+ * message since Discord's edit API cannot add attachments.
+ *
+ * Attachment-only responses (empty text) produce a placeholder edit with just
+ * the mention, followed by a separate message containing the files.
+ */
+async function handleOrdisOutboxMessage(
+  sessionId: string,
+  response: string,
+  attachments: AgentAttachment[] | undefined,
+  redis: Redis,
+  client: Client,
+): Promise<void> {
+  const placeholderMsgId = await redis.get(`ordis:placeholder:${sessionId}`);
+  const userId = await redis.get(`ordis:user:${sessionId}`);
+  const mention = userId ? `\n<@${userId}>` : "";
+
+  if (placeholderMsgId && config.discord.ordisWebhookUrl) {
+    // Build edit content: response text + mention, or just the mention for attachment-only.
+    const editContent = response.trim()
+      ? response + mention
+      : mention.trimStart() || "✅";
+
+    await fetch(`${config.discord.ordisWebhookUrl}/messages/${placeholderMsgId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: editContent }),
+    });
+
+    await redis.del(`ordis:placeholder:${sessionId}`);
+  }
+
+  // Send attachments as a follow-up in the main ordis channel (Discord edit API
+  // cannot include attachments, so they must be a separate message).
+  if (attachments && attachments.length > 0 && config.discord.ordisChannelId) {
+    const files = buildAttachments(attachments);
+    if (files.length > 0) {
+      const ordisChannel = await client.channels.fetch(config.discord.ordisChannelId);
+      if (ordisChannel && ordisChannel.isTextBased() && !ordisChannel.isDMBased()) {
+        await (ordisChannel as TextChannel).send({ files });
+      }
+    }
+  }
 }
