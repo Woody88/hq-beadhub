@@ -241,18 +241,26 @@ async function getOrReuseOrdisThread(
   sessionMap: SessionMap,
   redis: Redis,
 ): Promise<ThreadChannel | null> {
-  // If this worker session already has a thread mapped, reuse it
+  // If this worker session already has a thread mapped, reuse it — but verify
+  // the thread is still accessible (not deleted). If it's gone, clear the stale
+  // mapping and fall through to find the current active thread.
   const existingThreadId = await sessionMap.getThreadId(event.session_id);
   if (existingThreadId) {
     try {
       const thread = await ordisChannel.threads.fetch(existingThreadId);
-      if (thread) {
-        if (thread.archived) await thread.setArchived(false);
-        return thread;
-      }
+      if (thread && !thread.archived) return thread;
+      if (thread?.archived) await thread.setArchived(false).catch(() => null);
+      if (thread && !thread.archived) return thread;
     } catch {
-      // Thread gone — fall through to look up active thread
+      // Thread deleted or inaccessible — clear stale mapping and fall through
+      console.warn(`[bridge] Stale thread mapping ${existingThreadId} for session ${event.session_id.slice(0, 8)} — clearing`);
     }
+    // Clear stale session → thread mapping from Redis
+    await redis.pipeline()
+      .hdel("discord-bridge:sessions", event.session_id)
+      .hdel("discord-bridge:threads", existingThreadId)
+      .hdel("discord-bridge:session-source", existingThreadId)
+      .exec();
   }
 
   // Look up the active ordis activity thread for this user request
