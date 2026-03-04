@@ -141,10 +141,20 @@ async function handleChatMessage(
       }
     }
 
-    if (msgBody === null || fromAlias === null) {
+    if (fromAlias === null) {
       console.warn(
-        `[bridge] Could not fetch body for worker message ${event.message_id} after all retries — skipping`,
+        `[bridge] Could not determine sender for worker message ${event.message_id} — skipping`,
       );
+      return;
+    }
+
+    // Body fetch failed — still create/find the thread so the spin-up is visible,
+    // but skip posting the unresolvable message content.
+    if (msgBody === null) {
+      console.warn(
+        `[bridge] Could not fetch body for worker message ${event.message_id} — creating thread anyway`,
+      );
+      await getOrCreateWorkerThread(event, "", ordisChannel, sessionMap);
       return;
     }
 
