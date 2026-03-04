@@ -3,7 +3,7 @@ import type { TextChannel, ThreadChannel, WebhookClient } from "discord.js";
 import type { BeadHubEvent, ChatMessageEvent } from "./types.js";
 import type { SessionMap } from "./session-map.js";
 import { config } from "./config.js";
-import { getSessionMessages, getProjectRepos } from "./beadhub-client.js";
+import { getSessionMessages, getSessionMessagesWithKey, getProjectRepos } from "./beadhub-client.js";
 import { sendAsAgent } from "./discord-sender.js";
 import { stopTypingIndicator } from "./discord-listener.js";
 
@@ -125,10 +125,15 @@ async function handleChatMessage(
     let msgBody: string | null = event.body || null;
 
     if (msgBody === null) {
+      // Worker sessions live in the control-plane project where HMAC auth doesn't
+      // resolve. Use the control-plane API key (Bearer) for the admin fetch.
+      const cpApiKey = config.controlPlane.apiKey || config.beadhub.apiKey;
       for (const delay of [0, 500, 1500, 3000, 5000]) {
         if (delay > 0) await new Promise((r) => setTimeout(r, delay));
         try {
-          const msgs = await getSessionMessages(event.session_id, 20, event.project_id || undefined);
+          const msgs = cpApiKey
+            ? await getSessionMessagesWithKey(event.session_id, cpApiKey, 20)
+            : await getSessionMessages(event.session_id, 20, event.project_id || undefined);
           const target = msgs.find((m) => m.message_id === event.message_id);
           if (target) {
             fromAlias = target.from_agent;
