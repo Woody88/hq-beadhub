@@ -119,22 +119,25 @@ async function handleChatMessage(
       return;
     }
 
-    // Fetch the full message body (event.preview is truncated to 80 chars).
-    // Retry with backoff to handle race conditions where BeadHub hasn't persisted the message yet.
-    let fromAlias: string | null = null;
-    let msgBody: string | null = null;
-    for (const delay of [0, 500, 1500, 3000, 5000]) {
-      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-      try {
-        const msgs = await getSessionMessages(event.session_id, 20, event.project_id || undefined);
-        const target = msgs.find((m) => m.message_id === event.message_id);
-        if (target) {
-          fromAlias = target.from_agent;
-          msgBody = target.body;
-          break;
+    // Use the body included in the event payload (available since beadhub-a3g).
+    // Fall back to an API fetch with backoff for older server versions that omit it.
+    let fromAlias: string | null = event.from_alias || null;
+    let msgBody: string | null = event.body || null;
+
+    if (msgBody === null) {
+      for (const delay of [0, 500, 1500, 3000, 5000]) {
+        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+        try {
+          const msgs = await getSessionMessages(event.session_id, 20, event.project_id || undefined);
+          const target = msgs.find((m) => m.message_id === event.message_id);
+          if (target) {
+            fromAlias = target.from_agent;
+            msgBody = target.body;
+            break;
+          }
+        } catch (err) {
+          console.warn(`[bridge] Error fetching worker message body: ${err}`);
         }
-      } catch (err) {
-        console.warn(`[bridge] Error fetching worker message body: ${err}`);
       }
     }
 
@@ -168,20 +171,23 @@ async function handleChatMessage(
     ordisWebhookConfig &&
     event.project_id === ordisWebhookConfig.controlPlaneProjectId
   ) {
-    // Fetch message body using HMAC auth with the control-plane project ID (with retry for race condition).
-    // Retries use increasing backoff; if all fail we skip posting rather than sending truncated preview.
-    let msgBody: string | null = null;
-    for (const delay of [0, 500, 1500, 3000, 5000]) {
-      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-      try {
-        const msgs = await getSessionMessages(event.session_id, 2000, ordisWebhookConfig.controlPlaneProjectId);
-        const target = msgs.find((m) => m.message_id === event.message_id);
-        if (target) {
-          msgBody = target.body;
-          break;
+    // Use the body included in the event payload (available since beadhub-a3g).
+    // Fall back to API fetch with backoff for older server versions that omit it.
+    let msgBody: string | null = event.body || null;
+
+    if (msgBody === null) {
+      for (const delay of [0, 500, 1500, 3000, 5000]) {
+        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+        try {
+          const msgs = await getSessionMessages(event.session_id, 2000, ordisWebhookConfig.controlPlaneProjectId);
+          const target = msgs.find((m) => m.message_id === event.message_id);
+          if (target) {
+            msgBody = target.body;
+            break;
+          }
+        } catch (err) {
+          console.warn(`[bridge] Error fetching control-plane message: ${err}`);
         }
-      } catch (err) {
-        console.warn(`[bridge] Error fetching control-plane message: ${err}`);
       }
     }
 
