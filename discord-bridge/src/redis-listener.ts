@@ -5,7 +5,7 @@ import type { BeadHubEvent, ChatMessageEvent } from "./types.js";
 import type { SessionMap } from "./session-map.js";
 import { config } from "./config.js";
 import { getSessionMessages, getSessionMessagesWithKey, getProjectRepos } from "./beadhub-client.js";
-import { sendAsAgent } from "./discord-sender.js";
+import { sendAsAgent, getOrCreateThread } from "./discord-sender.js";
 import { stopTypingIndicator } from "./discord-listener.js";
 
 /** Set of message_ids we've already relayed (echo suppression + dedup). */
@@ -20,17 +20,6 @@ export function wasRelayed(messageId: string): boolean {
   return recentlyRelayed.has(messageId);
 }
 
-/**
- * Subscribe to all workspace event channels via PSUBSCRIBE events:*
- * and relay chat.message_sent events to Discord.
- *
- * The `cmdRedis` client is used for regular commands (RPUSH to orchestrator inbox).
- * A duplicate is created internally for PSUBSCRIBE.
- *
- * `ordisChannel` (optional) is the #ordis TextChannel used to create worker spin-up
- * threads. When provided, BeadHub chat sessions involving neo/hawk are mirrored into
- * a dedicated thread created under a "🤖 Spinning up <worker>" message in #ordis.
- */
 /** Optional ordis webhook for posting to #ordis channel directly */
 export interface OrdisWebhookConfig {
   webhookUrl: string;
@@ -60,7 +49,6 @@ export async function startRedisListener(
   sessionMap: SessionMap,
   echoTtlMs: number,
   bridgeAlias: string,
-  ordisChannel?: TextChannel,
 ): Promise<void> {
   // ioredis requires a duplicate client for subscriptions
   const sub = cmdRedis.duplicate();
@@ -82,23 +70,11 @@ export async function startRedisListener(
       // Skip messages sent by the bridge itself (human Discord replies relayed to BeadHub)
       if (chatEvent.from_alias === bridgeAlias) return;
 
-      await handleChatMessage(chatEvent, cmdRedis, channel, webhook, sessionMap, echoTtlMs, ordisChannel);
+      await handleChatMessage(chatEvent, cmdRedis, channel, webhook, sessionMap, echoTtlMs);
     } catch (err) {
       console.error("[redis] Error handling event:", err);
     }
   });
-}
-
-/**
- * Worker agent aliases. Chat sessions involving these aliases are mirrored into
- * a dedicated thread in #ordis (under a spin-up message), rather than #agent-comms.
- */
-const WORKER_AGENTS = new Set(["neo", "hawk"]);
-
-/** Extract a bead ID (e.g. "hq-beadhub-295") from a message body for the thread name. */
-function extractBeadId(body: string): string | null {
-  const match = body.match(/\b([a-z]+-[a-z]+-\d+)\b/i);
-  return match ? match[1] : null;
 }
 
 async function handleChatMessage(
@@ -108,92 +84,17 @@ async function handleChatMessage(
   webhook: WebhookClient,
   sessionMap: SessionMap,
   echoTtlMs: number,
-  ordisChannel?: TextChannel,
 ): Promise<void> {
   // Dedup: same chat message fires on each participant's channel
   if (wasRelayed(event.message_id)) return;
   markRelayed(event.message_id, echoTtlMs);
 
-  const involvesWorker =
-    WORKER_AGENTS.has(event.from_alias) ||
-    event.to_aliases.some((a) => WORKER_AGENTS.has(a));
-
-  // ── Worker session (neo / hawk involved) ─────────────────────────────────
-  // Route into the active ordis activity thread (already on the ordis response
-  // message) rather than creating a separate spin-up message. This keeps worker
-  // activity contextual and respects Discord's one-thread-per-message limit.
-  // The thread is renamed on first worker message to reflect the task/worker.
-  // The user can reply in the thread — replies route back to the BeadHub session.
-  if (involvesWorker) {
-    if (!ordisChannel) {
-      console.warn(
-        "[bridge] Worker chat event received but ordis channel not configured — dropping",
-      );
-      return;
-    }
-
-    // Use the body included in the event payload (available since beadhub-a3g).
-    // Fall back to an API fetch with backoff using the control-plane API key.
-    let fromAlias: string | null = event.from_alias || null;
-    let msgBody: string | null = event.body || null;
-
-    if (msgBody === null) {
-      const cpApiKey = config.controlPlane.apiKey || config.beadhub.apiKey;
-      for (const delay of [0, 500, 1500, 3000, 5000]) {
-        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-        try {
-          const msgs = cpApiKey
-            ? await getSessionMessagesWithKey(event.session_id, cpApiKey, 200)
-            : await getSessionMessages(event.session_id, 200, event.project_id || undefined);
-          const target = msgs.find((m) => m.message_id === event.message_id);
-          if (target) {
-            fromAlias = target.from_agent;
-            msgBody = target.body;
-            break;
-          }
-        } catch (err) {
-          console.warn(`[bridge] Error fetching worker message body: ${err}`);
-        }
-      }
-    }
-
-    if (fromAlias === null) {
-      console.warn(
-        `[bridge] Could not determine sender for worker message ${event.message_id} — skipping`,
-      );
-      return;
-    }
-
-    if (msgBody === null) {
-      console.warn(
-        `[bridge] Could not fetch body for worker message ${event.message_id} — skipping`,
-      );
-      return;
-    }
-
-    const thread = await getOrReuseOrdisThread(event, msgBody, ordisChannel, sessionMap, cmdRedis);
-    if (!thread) return;
-
-    // Worker messages go to #ordis threads — must use the ordis webhook (not
-    // the #agent-comms webhook) or Discord returns 10003 Unknown Channel.
-    const ordisWebhook = getOrdisWebhook() ?? webhook;
-    await sendAsAgent(ordisWebhook, thread, fromAlias, msgBody);
-    console.log(
-      `[bridge] ${fromAlias} → ordis activity thread "${thread.name}": ${msgBody.slice(0, 80)}`,
-    );
-
-    await maybeRouteToOrchestrator(event, fromAlias, msgBody, thread, cmdRedis);
-    return;
-  }
-
-  // ── Control-plane messages (ordis ↔ human/bridge, no workers) ────────────
+  // ── Control-plane messages (ordis ↔ human/bridge) ────────────────────────
   // Post flat to #ordis channel (no threads).
   if (
     ordisWebhookConfig &&
     event.project_id === ordisWebhookConfig.controlPlaneProjectId
   ) {
-    // Use the body included in the event payload (available since beadhub-a3g).
-    // Fall back to API fetch with backoff for older server versions that omit it.
     let msgBody: string | null = event.body || null;
 
     if (msgBody === null) {
@@ -223,12 +124,50 @@ async function handleChatMessage(
     return;
   }
 
-  // ── Unhandled: non-worker, non-control-plane messages ────────────────────
-  // These are unexpected in the current 3-agent setup (ordis / neo / hawk).
-  // Log and drop — #agent-comms routing has been intentionally removed.
-  console.warn(
-    `[bridge] Unhandled chat event from ${event.from_alias} (project ${event.project_id}) — no routing rule matched, dropping`,
-  );
+  // ── All other sessions → #agent-comms thread ─────────────────────────────
+  // One persistent thread per BeadHub session (session_id ↔ thread_id via session-map).
+  // Thread name is sorted participant aliases joined with ↔ (e.g. "neo ↔ ordis").
+  // Human replies in the thread are routed back to the BeadHub session by discord-listener.
+  let fromAlias: string | null = event.from_alias || null;
+  let msgBody: string | null = event.body || null;
+
+  if (msgBody === null) {
+    const apiKey = config.controlPlane.apiKey || config.beadhub.apiKey;
+    for (const delay of [0, 500, 1500, 3000, 5000]) {
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+      try {
+        const msgs = apiKey
+          ? await getSessionMessagesWithKey(event.session_id, apiKey, 200)
+          : await getSessionMessages(event.session_id, 200, event.project_id || undefined);
+        const target = msgs.find((m) => m.message_id === event.message_id);
+        if (target) {
+          fromAlias = target.from_agent;
+          msgBody = target.body;
+          break;
+        }
+      } catch (err) {
+        console.warn(`[bridge] Error fetching agent-comms message body: ${err}`);
+      }
+    }
+  }
+
+  if (fromAlias === null) {
+    console.warn(`[bridge] Could not determine sender for message ${event.message_id} — skipping`);
+    return;
+  }
+
+  if (msgBody === null) {
+    console.warn(`[bridge] Could not fetch body for message ${event.message_id} — skipping`);
+    return;
+  }
+
+  const participants = [event.from_alias, ...event.to_aliases];
+  const thread = await getOrCreateThread(channel, sessionMap, event.session_id, participants);
+
+  await sendAsAgent(webhook, thread, fromAlias, msgBody);
+  console.log(`[bridge] ${fromAlias} → #agent-comms thread "${thread.name}": ${msgBody.slice(0, 80)}`);
+
+  await maybeRouteToOrchestrator(event, fromAlias, msgBody, thread, cmdRedis);
 }
 
 /** Agent alias → emoji prefix for ordis channel posts */
@@ -237,84 +176,6 @@ const AGENT_EMOJIS: Record<string, string> = {
   neo: "🔧",
   hawk: "🦅",
 };
-
-/**
- * Route a worker chat message into the active ordis activity thread.
- *
- * Looks up `ordis:active_thread` in Redis (set by discord-listener when the
- * ordis activity thread is created for the current user request). On the first
- * worker message for this BeadHub session, renames the thread to reflect the
- * worker and task (e.g. "neo — hq-beadhub-295"), then maps the worker session
- * to the thread so the user can reply there and have it routed back to the
- * BeadHub chat session.
- */
-async function getOrReuseOrdisThread(
-  event: ChatMessageEvent,
-  body: string,
-  ordisChannel: TextChannel,
-  sessionMap: SessionMap,
-  redis: Redis,
-): Promise<ThreadChannel | null> {
-  // If this worker session already has a thread mapped, reuse it — but verify
-  // the thread is still accessible (not deleted). If it's gone, clear the stale
-  // mapping and fall through to find the current active thread.
-  const existingThreadId = await sessionMap.getThreadId(event.session_id);
-  if (existingThreadId) {
-    try {
-      const thread = await ordisChannel.threads.fetch(existingThreadId);
-      if (thread && !thread.archived) return thread;
-      if (thread?.archived) await thread.setArchived(false).catch(() => null);
-      if (thread && !thread.archived) return thread;
-    } catch {
-      // Thread deleted or inaccessible — clear stale mapping and fall through
-      console.warn(`[bridge] Stale thread mapping ${existingThreadId} for session ${event.session_id.slice(0, 8)} — clearing`);
-    }
-    // Clear stale session → thread mapping from Redis
-    await redis.pipeline()
-      .hdel("discord-bridge:sessions", event.session_id)
-      .hdel("discord-bridge:threads", existingThreadId)
-      .hdel("discord-bridge:session-source", existingThreadId)
-      .exec();
-  }
-
-  // Look up the active ordis activity thread for this user request
-  const activeThreadId = await redis.get("ordis:active_thread");
-  if (!activeThreadId) {
-    console.warn("[bridge] No active ordis thread found for worker message — dropping");
-    return null;
-  }
-
-  let thread: ThreadChannel | null = null;
-  try {
-    thread = await ordisChannel.threads.fetch(activeThreadId);
-  } catch {
-    console.warn(`[bridge] Could not fetch active ordis thread ${activeThreadId} — dropping`);
-    return null;
-  }
-  if (!thread) return null;
-  if (thread.archived) await thread.setArchived(false);
-
-  // Rename the thread to reflect the worker and task on first use
-  const workerAlias =
-    [event.from_alias, ...event.to_aliases].find((a) => WORKER_AGENTS.has(a)) ?? "worker";
-  const beadId = extractBeadId(body);
-  const threadName = (beadId ? `${workerAlias} — ${beadId}` : `${workerAlias} — activity`).slice(0, 100);
-  if (thread.name !== threadName) {
-    try {
-      await thread.setName(threadName);
-    } catch (err) {
-      console.warn(`[bridge] Could not rename thread: ${err}`);
-    }
-  }
-
-  // Map worker session → thread so subsequent messages and user replies route here
-  await sessionMap.setWithSource(event.session_id, thread.id, "beadhub");
-
-  console.log(
-    `[bridge] Worker session ${event.session_id.slice(0, 8)}... mapped to ordis thread "${threadName}"`,
-  );
-  return thread;
-}
 
 /**
  * Deliver an ordis response to the #ordis Discord channel.
