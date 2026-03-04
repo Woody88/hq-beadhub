@@ -174,6 +174,7 @@ async def _enrich(event: Event, redis: Redis, db_infra: DatabaseInfra) -> None:
                 UUID(event.message_id),
             )
             if msg and msg["body"]:
+                event.body = msg["body"]
                 event.preview = msg["body"][:80]
         event.project_slug = await get_workspace_project_slug(redis, event.workspace_id)
         event.project_id = await get_workspace_project_id(redis, event.workspace_id) or ""

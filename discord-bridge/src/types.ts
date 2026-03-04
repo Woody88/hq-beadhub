@@ -10,6 +10,8 @@ export interface ChatMessageEvent {
   from_alias: string;
   to_aliases: string[];
   preview: string;
+  /** Full message body included since beadhub-a3g; absent in older payloads. */
+  body?: string;
 }
 
 /** Any event from the events:* channels */
