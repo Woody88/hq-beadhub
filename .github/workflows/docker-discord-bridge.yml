@@ -1,4 +1,4 @@
-# triggers on discord-bridge/** and workflow changes — retrigger
+# triggers on discord-bridge/** and workflow changes
 name: Docker — discord-bridge
 
 on:
