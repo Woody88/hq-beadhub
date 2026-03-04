@@ -31,6 +31,21 @@ function isVoiceNote(message: Message): boolean {
   return message.flags.has(MessageFlags.IsVoiceMessage);
 }
 
+/**
+ * Formats Discord attachments as a text block to append to message content.
+ * Returns an empty string when there are no attachments.
+ * Voice notes are excluded upstream (caller returns early on isVoiceNote).
+ */
+function buildAttachmentText(attachments: Message["attachments"]): string {
+  if (attachments.size === 0) return "";
+  const lines = attachments.map((att) => {
+    const kb = (att.size / 1024).toFixed(1);
+    const ct = att.contentType ?? "unknown";
+    return `- ${att.name} (${ct}, ${kb} KB): ${att.url}`;
+  });
+  return "\n[Attachments]\n" + lines.join("\n");
+}
+
 /** Store a voice note pending Scripty transcription. Prunes entries older than 5 minutes. */
 function storePendingVoiceNote(message: Message): void {
   if (!message.channel.isThread()) return;
@@ -134,7 +149,8 @@ async function handleMessage(
     !message.channel.isThread()
   ) {
     const displayName = message.member?.displayName ?? message.author.username;
-    const result = await routeToOrdisChannel(displayName, message.content);
+    const attachmentText = buildAttachmentText(message.attachments);
+    const result = await routeToOrdisChannel(displayName, message.content + attachmentText);
 
     // Create a Discord thread on the user's message for streaming tool activity
     if (result?.sessionId) {
@@ -200,9 +216,11 @@ async function handleMessage(
     return;
   }
 
+  const attachmentText = buildAttachmentText(message.attachments);
+
   // Route AI channel messages to ai:inbox
   if (isAiChannel) {
-    await pushToAiInbox(redis, sessionMap, threadId, displayName, message.content);
+    await pushToAiInbox(redis, sessionMap, threadId, displayName, message.content + attachmentText);
     startTypingIndicator(message.channel);
     return;
   }
@@ -212,7 +230,7 @@ async function handleMessage(
 
   if (!sessionId) {
     // New thread with no session — route to orchestrator via BeadHub chat
-    await routeToOrchestratorViaChat(sessionMap, threadId, displayName, message.content, bridgeIdentity);
+    await routeToOrchestratorViaChat(sessionMap, threadId, displayName, message.content + attachmentText, bridgeIdentity);
     startTypingIndicator(message.channel);
     return;
   }
@@ -222,7 +240,7 @@ async function handleMessage(
 
   if (source === "orchestrator") {
     // Legacy orchestrator-managed thread — migrate to BeadHub chat routing
-    const result = await sendToOrchestratorChat(displayName, message.content);
+    const result = await sendToOrchestratorChat(displayName, message.content + attachmentText);
     await sessionMap.setWithSource(result.sessionId, threadId, "beadhub");
     startTypingIndicator(message.channel);
     return;
@@ -236,7 +254,7 @@ async function handleMessage(
     const is404 = err instanceof Error && err.message.includes("404");
     if (is404) {
       console.log(`[discord-listener] BeadHub session ${sessionId.slice(0, 8)}... gone — routing via orchestrator chat`);
-      await routeToOrchestratorViaChat(sessionMap, threadId, displayName, message.content, bridgeIdentity);
+      await routeToOrchestratorViaChat(sessionMap, threadId, displayName, message.content + attachmentText, bridgeIdentity);
       startTypingIndicator(message.channel);
     } else {
       throw err;
@@ -457,7 +475,7 @@ async function relayToBeadHub(
     bridgeIdentity.alias,
   );
 
-  const content = contentOverride ?? message.content;
+  const content = contentOverride ?? (message.content + buildAttachmentText(message.attachments));
   // Format: include the Discord username so agents know who's speaking
   const body = `[${displayName} via Discord] ${content}`;
 
