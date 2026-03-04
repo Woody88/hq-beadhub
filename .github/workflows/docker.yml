@@ -20,7 +20,7 @@ jobs:
     name: Build and Push
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -68,4 +68,4 @@ jobs:
             -f "client_payload[tag]=$(echo '${{ steps.meta.outputs.tags }}' | grep 'sha-' | head -1 | cut -d: -f2)" \
             -f "client_payload[manifest]=manifests/platform/beadhub/api.yaml"
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
