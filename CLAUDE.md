@@ -51,8 +51,9 @@ The following three agents are the **permanent team** across ALL BeadHub project
 - Use `bdh :aweb chat send-and-wait <alias> "msg" --start-conversation` for ALL coordination during implementation: progress updates, design questions, blocker escalations, and decisions that need sign-off.
 - Use `bdh :aweb mail send ordis "msg"` ONLY for the final handoff (e.g., "PR #123 is open — summary of changes").
 - Do NOT use PR comments, commit messages, or issue updates as the primary communication channel with other agents.
+- **Format ALL chat messages in Discord markdown** — use ` ```language\ncode\n``` ` for code blocks, `**bold**` for emphasis, and bullet lists for structured output. Do NOT use plain text or GitHub-style markdown (no `##` headings, no `> blockquotes`). Discord renders its own markdown subset; plain text and GitHub markdown render poorly in threads.
 
-**Why:** Discord-bridge creates a thread for every bdh chat session involving a worker, so Woodson can observe agent conversations and intervene when needed. Mail is fire-and-forget and not surfaced in Discord; it is only appropriate for terminal notifications (handoffs).
+**Why:** Discord-bridge creates a thread under the ordis "🤖 Spinning up" message for every bdh chat session involving a worker, so Woodson can observe agent conversations and intervene when needed. Mail is fire-and-forget and not surfaced in Discord; it is only appropriate for terminal notifications (handoffs).
 
 ### Key Tools
 - **`bdh`** — Beads CLI (git-native issue tracking)
