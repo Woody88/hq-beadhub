@@ -73,6 +73,14 @@ export async function startRedisListener(
   });
 }
 
+/**
+ * Worker agent aliases. Chat messages FROM or TO these aliases always get a
+ * Discord thread in #agent-comms (via relayToDiscord), even when the BeadHub
+ * event originates from the control-plane project. This lets Woodson observe
+ * agent-to-agent conversations and reply into them directly.
+ */
+const WORKER_AGENTS = new Set(["neo", "hawk"]);
+
 async function handleChatMessage(
   event: ChatMessageEvent,
   cmdRedis: Redis,
@@ -85,10 +93,18 @@ async function handleChatMessage(
   if (wasRelayed(event.message_id)) return;
   markRelayed(event.message_id, echoTtlMs);
 
-  // Control-plane messages → post to #ordis channel (flat, no thread)
+  // Messages involving worker agents (neo, hawk) always get a Discord thread
+  // in #agent-comms so Woodson can observe and reply. Skip flat #ordis routing
+  // for these even when the event comes from the control-plane project.
+  const involvesWorker =
+    WORKER_AGENTS.has(event.from_alias) ||
+    event.to_aliases.some((a) => WORKER_AGENTS.has(a));
+
+  // Control-plane messages (ordis ↔ human/bridge) → post to #ordis channel (flat, no thread)
   if (
     ordisWebhookConfig &&
-    event.project_id === ordisWebhookConfig.controlPlaneProjectId
+    event.project_id === ordisWebhookConfig.controlPlaneProjectId &&
+    !involvesWorker
   ) {
     // Fetch message body using HMAC auth with the control-plane project ID (with retry for race condition).
     // Retries use increasing backoff; if all fail we skip posting rather than sending truncated preview.
