@@ -219,8 +219,8 @@ async function postToOrdisChannel(
       }
     }
 
-    // Remove the placeholder key — it's been consumed.
-    await redis.del(`ordis:placeholder:${sessionId}`);
+    // Remove the placeholder and user keys — they've been consumed.
+    await redis.del(`ordis:placeholder:${sessionId}`, `ordis:user:${sessionId}`);
   } else {
     // --- Fallback: post as a new message (no placeholder found) ---
     const emoji = AGENT_EMOJIS[fromAlias] ?? "🤖";

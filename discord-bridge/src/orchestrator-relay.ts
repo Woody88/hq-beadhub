@@ -121,16 +121,16 @@ async function handleOutboxMessage(
 
   const { thread_id, response, attachments } = msg;
 
-  // Stop typing indicator — response has arrived
-  stopTypingIndicator(thread_id);
-
   // Check if this thread belongs to an ordis session.
   // If so, edit the placeholder in the main #ordis channel and send attachments
   // as a follow-up there rather than posting inside the activity thread.
   const ordisSessionId = await redis.get(`ordis:thread_to_session:${thread_id}`);
   if (ordisSessionId && config.discord.ordisChannelId && config.discord.ordisWebhookUrl) {
+    // Typing indicator was started on the ordis channel, not the activity thread.
+    stopTypingIndicator(config.discord.ordisChannelId);
     await handleOrdisOutboxMessage(
       ordisSessionId,
+      fromAlias,
       response,
       attachments,
       redis,
@@ -142,6 +142,9 @@ async function handleOutboxMessage(
     );
     return;
   }
+
+  // Stop typing indicator — response has arrived
+  stopTypingIndicator(thread_id);
 
   // Fetch the thread
   let thread;
@@ -170,17 +173,46 @@ async function handleOutboxMessage(
   );
 }
 
+/** Agent alias → emoji prefix for ordis channel posts */
+const AGENT_EMOJIS: Record<string, string> = {
+  ordis: "🎯",
+  neo: "🔧",
+  hawk: "🦅",
+};
+
+function splitMessage(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+    let splitAt = remaining.lastIndexOf("\n", maxLen);
+    if (splitAt <= 0) splitAt = maxLen;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).replace(/^\n/, "");
+  }
+  return chunks;
+}
+
 /**
  * Handle a final ordis response that arrived via the agent outbox.
  * Edits the placeholder message in the main #ordis channel with the response
  * text and a <@userId> mention, then sends any file attachments as a follow-up
  * message since Discord's edit API cannot add attachments.
  *
+ * Long responses are split into chunks: the placeholder is edited with the
+ * first chunk, and overflow chunks are posted as new channel messages with the
+ * mention appended to the last chunk only.
+ *
  * Attachment-only responses (empty text) produce a placeholder edit with just
  * the mention, followed by a separate message containing the files.
  */
 async function handleOrdisOutboxMessage(
   sessionId: string,
+  fromAlias: string,
   response: string,
   attachments: AgentAttachment[] | undefined,
   redis: Redis,
@@ -191,10 +223,20 @@ async function handleOrdisOutboxMessage(
   const mention = userId ? `\n<@${userId}>` : "";
 
   if (placeholderMsgId && config.discord.ordisWebhookUrl) {
-    // Build edit content: response text + mention, or just the mention for attachment-only.
-    const editContent = response.trim()
-      ? response + mention
-      : mention.trimStart() || "✅";
+    // Reserve enough room for the mention on the last chunk.
+    const maxBodyLen = config.maxDiscordMessageLength - mention.length;
+    const bodyChunks = response.trim() ? splitMessage(response, maxBodyLen) : [];
+
+    // Build the content for the placeholder edit (first or only chunk + mention).
+    let editContent: string;
+    if (bodyChunks.length === 0) {
+      // Attachment-only or empty response — just the mention (or a fallback).
+      editContent = mention.trimStart() || "✅";
+    } else if (bodyChunks.length === 1) {
+      editContent = bodyChunks[0] + mention;
+    } else {
+      editContent = bodyChunks[0];
+    }
 
     await fetch(`${config.discord.ordisWebhookUrl}/messages/${placeholderMsgId}`, {
       method: "PATCH",
@@ -202,7 +244,22 @@ async function handleOrdisOutboxMessage(
       body: JSON.stringify({ content: editContent }),
     });
 
-    await redis.del(`ordis:placeholder:${sessionId}`);
+    // Post any overflow chunks as new messages (mention on the last one).
+    if (bodyChunks.length > 1) {
+      const emoji = AGENT_EMOJIS[fromAlias] ?? "🤖";
+      const username = `${emoji} ${fromAlias}`;
+      for (let i = 1; i < bodyChunks.length; i++) {
+        const isLast = i === bodyChunks.length - 1;
+        const content = isLast ? bodyChunks[i] + mention : bodyChunks[i];
+        await fetch(config.discord.ordisWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, content }),
+        });
+      }
+    }
+
+    await redis.del(`ordis:placeholder:${sessionId}`, `ordis:user:${sessionId}`);
   }
 
   // Send attachments as a follow-up in the main ordis channel (Discord edit API
