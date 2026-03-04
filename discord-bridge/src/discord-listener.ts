@@ -1,4 +1,4 @@
-import type { Client, Message, PartialMessage, ThreadChannel } from "discord.js";
+import type { Client, Message, PartialMessage, TextChannel, ThreadChannel } from "discord.js";
 import { ChannelType, MessageFlags } from "discord.js";
 import type Redis from "ioredis";
 import type { SessionMap } from "./session-map.js";
@@ -142,49 +142,61 @@ async function handleMessage(
   if (message.author.bot) return;
 
   // Ordis channel: flat conversation (no threads) → control-plane chat
-  // Creates a thread on the user's message for tool activity streaming
+  // Posts a placeholder message in the main channel, then creates an activity
+  // thread on the placeholder (not the user's message) so the user is never
+  // mentioned by thread creation and it stays out of their sidebar.
   if (
     config.discord.ordisChannelId &&
     message.channel.id === config.discord.ordisChannelId &&
     !message.channel.isThread()
   ) {
+    const userId = message.author.id;
     const displayName = message.member?.displayName ?? message.author.username;
     const attachmentText = buildAttachmentText(message.attachments);
     const result = await routeToOrdisChannel(displayName, message.content + attachmentText);
 
-    // Create a Discord thread on the user's message for streaming tool activity
-    if (result?.sessionId) {
+    if (result?.sessionId && config.discord.ordisWebhookUrl && redisRef) {
       try {
-        const thread = await message.startThread({
-          name: `ordis processing...`,
-          autoArchiveDuration: 60,
-        });
-        // Store thread ID in Redis so orchestrator can post tool activity
-        if (redisRef) {
-          await redisRef.set(
-            `ordis:thread:${result.sessionId}`,
-            thread.id,
-            "EX",
-            3600,
-          );
-          console.log(
-            `[discord->ordis] Created thread ${thread.id} for session ${result.sessionId.slice(0, 8)}...`,
-          );
-        }
-        // Post initial indicator in the thread
-        // Discord webhooks require thread_id as a URL query parameter
-        if (config.discord.ordisWebhookUrl) {
-          await fetch(`${config.discord.ordisWebhookUrl}?thread_id=${thread.id}`, {
+        // 1. Post a placeholder message in the main channel via webhook (wait=true
+        //    returns the message object so we can get its ID).
+        const placeholderResp = await fetch(
+          `${config.discord.ordisWebhookUrl}?wait=true`,
+          {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               username: "🎯 ordis",
               content: "⏳ Processing...",
             }),
-          });
+          },
+        );
+        if (!placeholderResp.ok) {
+          throw new Error(`Webhook placeholder POST failed: ${placeholderResp.status}`);
         }
+        const placeholderData = await placeholderResp.json() as { id: string };
+        const placeholderMsgId = placeholderData.id;
+
+        // 2. Create activity thread on the placeholder message (not the user's
+        //    message) so the user is not subscribed and it stays off their sidebar.
+        const channel = message.channel as TextChannel;
+        const placeholderMsg = await channel.messages.fetch(placeholderMsgId);
+        const thread = await placeholderMsg.startThread({
+          name: "ordis activity",
+          autoArchiveDuration: 60,
+        });
+
+        // 3. Store session state in Redis (1-hour TTL).
+        await redisRef.set(`ordis:thread:${result.sessionId}`, thread.id, "EX", 3600);
+        await redisRef.set(`ordis:placeholder:${result.sessionId}`, placeholderMsgId, "EX", 3600);
+        await redisRef.set(`ordis:user:${result.sessionId}`, userId, "EX", 3600);
+        // Reverse mapping: thread → session (for outbox attachment handling)
+        await redisRef.set(`ordis:thread_to_session:${thread.id}`, result.sessionId, "EX", 3600);
+
+        console.log(
+          `[discord->ordis] Placeholder ${placeholderMsgId}, activity thread ${thread.id} for session ${result.sessionId.slice(0, 8)}...`,
+        );
       } catch (err) {
-        console.warn(`[discord->ordis] Failed to create thread:`, err);
+        console.warn(`[discord->ordis] Failed to create placeholder/thread:`, err);
       }
     }
 
