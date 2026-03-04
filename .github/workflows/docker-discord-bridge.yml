@@ -17,11 +17,8 @@ jobs:
     name: Build and Push
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
-    outputs:
-      tag: ${{ steps.tag.outputs.value }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,16 +57,12 @@ jobs:
           cache-from: type=gha,scope=discord-bridge
           cache-to: type=gha,mode=max,scope=discord-bridge
 
-      - name: Output image tag
-        id: tag
-        run: echo "value=$(echo '${{ steps.meta.outputs.tags }}' | grep 'sha-' | head -1 | cut -d: -f2)" >> $GITHUB_OUTPUT
-
-  update-manifest:
-    needs: build-and-push
-    uses: Woody88/homelab-k8s/.github/workflows/image-updater.yml@main
-    secrets:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
-    with:
-      image: ghcr.io/woody88/discord-bridge
-      tag: ${{ needs.build-and-push.outputs.tag }}
-      manifest: manifests/platform/beadhub/discord-bridge.yaml
+      - name: Dispatch image update to homelab-k8s
+        run: |
+          gh api repos/Woody88/homelab-k8s/dispatches \
+            -f event_type=image_updated \
+            -f "client_payload[image]=ghcr.io/woody88/discord-bridge" \
+            -f "client_payload[tag]=$(echo '${{ steps.meta.outputs.tags }}' | grep 'sha-' | head -1 | cut -d: -f2)" \
+            -f "client_payload[manifest]=manifests/platform/beadhub/discord-bridge.yaml"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
