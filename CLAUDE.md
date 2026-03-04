@@ -76,8 +76,8 @@ Agents must NEVER use a local dolt database for ticket operations. All ticket da
 
 **Allowed:**
 - `bdh list`, `bdh show`, `bdh ready` — reads from BeadHub server API
-- `bd create`, `bd update`, `bd close` — writes to local git-backed JSONL
-- `bd sync` — pushes JSONL to git remote, pulls updates
+- `bdh create`, `bdh update`, `bdh close` — writes to local git-backed JSONL
+- `bdh sync` — pushes JSONL to git remote, pulls updates
 
 **Forbidden:**
 - Starting or depending on a local dolt database
@@ -85,11 +85,11 @@ Agents must NEVER use a local dolt database for ticket operations. All ticket da
 - Syncing tickets from the upstream fork (`beadhub/beadhub`)
 
 **Ticket creation flow:**
-1. `bd create ...` (creates in local JSONL)
-2. `bd sync` (pushes to git remote via `beads-sync` branch)
+1. `bdh create ...` (creates in local JSONL)
+2. `bdh sync` (pushes to git remote via `beads-sync` branch)
 3. BeadHub server picks up changes from git
 
-**If `bd` commands fail**, fall back to `bdh` (server API). Never try to repair a local database.
+**If `bdh` commands fail**, fall back to `bdh` (server API). Never try to repair a local database.
 
 ## CRITICAL: Agent Identity Rules
 

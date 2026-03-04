@@ -40,7 +40,7 @@ RUN echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node
 # Claude Code config: skip ALL interactive prompts + dangerously skip permissions
 RUN mkdir -p /home/node/.claude \
     && echo '{"hasCompletedOnboarding": true, "hasTrustDialogAccepted": true, "hasTrustDialogHooksAccepted": true}' > /home/node/.claude.json \
-    && echo '{"skipDangerousModePermissionPrompt": true, "mcpServers": {"maestro": {"command": "maestro", "args": ["mcp"]}}}' > /home/node/.claude/settings.json \
+    && echo '{"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt": true}' > /home/node/.claude/settings.json \
     && chown -R node:node /home/node/.claude /home/node/.claude.json
 
 USER node
