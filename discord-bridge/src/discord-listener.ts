@@ -212,9 +212,11 @@ async function handleMessage(
   const parentId = message.channel.parentId;
 
   const isAiChannel = config.discord.aiChannelId && parentId === config.discord.aiChannelId;
+  // Worker spin-up threads live under #ordis; allow replies from there too
+  const isOrdisThread = config.discord.ordisChannelId && parentId === config.discord.ordisChannelId;
 
   // Only handle threads in our configured channels
-  if (!isAiChannel && parentId !== config.discord.channelId) return;
+  if (!isAiChannel && !isOrdisThread && parentId !== config.discord.channelId) return;
 
   const threadId = message.channel.id;
   const displayName = message.member?.displayName ?? message.author.username;
@@ -302,7 +304,8 @@ async function handleVoiceNoteEdit(
   if (!message.channel.isThread()) return;
   const editParentId = message.channel.parentId;
   const isAiChannel = config.discord.aiChannelId && editParentId === config.discord.aiChannelId;
-  if (!isAiChannel && editParentId !== config.discord.channelId) return;
+  const isOrdisThread = config.discord.ordisChannelId && editParentId === config.discord.ordisChannelId;
+  if (!isAiChannel && !isOrdisThread && editParentId !== config.discord.channelId) return;
 
   const transcript = message.content;
   if (!transcript?.trim()) {

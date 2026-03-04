@@ -37,13 +37,25 @@ async function main(): Promise<void> {
   // 3. Load guild members for @mentions
   await loadGuildMembers(client);
 
-  // 4. Get the target channel
+  // 4. Get the target channel (#agent-comms fallback)
   const channel = await client.channels.fetch(config.discord.channelId);
   if (!channel || !channel.isTextBased() || channel.isDMBased()) {
     throw new Error(`Channel ${config.discord.channelId} is not a guild text channel`);
   }
   const textChannel = channel as TextChannel;
   console.log(`[discord] Target channel: #${textChannel.name}`);
+
+  // 4b. Get the ordis channel (worker spin-up threads are created here)
+  let ordisTextChannel: TextChannel | undefined;
+  if (config.discord.ordisChannelId) {
+    const ordisChannel = await client.channels.fetch(config.discord.ordisChannelId);
+    if (ordisChannel && ordisChannel.isTextBased() && !ordisChannel.isDMBased()) {
+      ordisTextChannel = ordisChannel as TextChannel;
+      console.log(`[discord] Ordis channel: #${ordisTextChannel.name}`);
+    } else {
+      console.warn(`[bridge] DISCORD_ORDIS_CHANNEL_ID set but channel is not a valid text channel`);
+    }
+  }
 
   // 4. Set up webhook client from pre-configured URL
   const webhook = getWebhook();
@@ -60,6 +72,7 @@ async function main(): Promise<void> {
     sessionMap,
     config.echoSuppressionTtlMs,
     bridgeIdentity.alias,
+    ordisTextChannel,
   );
 
   // 6b. Configure ordis webhook for control-plane messages → #ordis channel
