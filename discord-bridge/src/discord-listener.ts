@@ -191,6 +191,8 @@ async function handleMessage(
         await redisRef.set(`ordis:user:${result.sessionId}`, userId, "EX", 3600);
         // Reverse mapping: thread → session (for outbox attachment handling)
         await redisRef.set(`ordis:thread_to_session:${thread.id}`, result.sessionId, "EX", 3600);
+        // Well-known key: latest active ordis thread for worker message routing
+        await redisRef.set("ordis:active_thread", thread.id, "EX", 3600);
 
         console.log(
           `[discord->ordis] Placeholder ${placeholderMsgId}, activity thread ${thread.id} for session ${result.sessionId.slice(0, 8)}...`,

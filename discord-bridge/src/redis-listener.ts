@@ -108,25 +108,25 @@ async function handleChatMessage(
     event.to_aliases.some((a) => WORKER_AGENTS.has(a));
 
   // ── Worker session (neo / hawk involved) ─────────────────────────────────
-  // Mirror into a thread under a "🤖 Spinning up <worker>" message in #ordis.
-  // Thread is created on first message for the session; subsequent messages
-  // are posted into the same thread regardless of which participant sent them.
+  // Route into the active ordis activity thread (already on the ordis response
+  // message) rather than creating a separate spin-up message. This keeps worker
+  // activity contextual and respects Discord's one-thread-per-message limit.
+  // The thread is renamed on first worker message to reflect the task/worker.
+  // The user can reply in the thread — replies route back to the BeadHub session.
   if (involvesWorker) {
-    if (!ordisWebhookConfig || !ordisChannel) {
+    if (!ordisChannel) {
       console.warn(
-        "[bridge] Worker chat event received but ordis channel/webhook not configured — dropping",
+        "[bridge] Worker chat event received but ordis channel not configured — dropping",
       );
       return;
     }
 
     // Use the body included in the event payload (available since beadhub-a3g).
-    // Fall back to an API fetch with backoff for older server versions that omit it.
+    // Fall back to an API fetch with backoff using the control-plane API key.
     let fromAlias: string | null = event.from_alias || null;
     let msgBody: string | null = event.body || null;
 
     if (msgBody === null) {
-      // Worker sessions live in the control-plane project where HMAC auth doesn't
-      // resolve. Use the control-plane API key (Bearer) for the admin fetch.
       const cpApiKey = config.controlPlane.apiKey || config.beadhub.apiKey;
       for (const delay of [0, 500, 1500, 3000, 5000]) {
         if (delay > 0) await new Promise((r) => setTimeout(r, delay));
@@ -153,27 +153,19 @@ async function handleChatMessage(
       return;
     }
 
-    // Body fetch failed — still create/find the thread so the spin-up is visible,
-    // but skip posting the unresolvable message content.
     if (msgBody === null) {
       console.warn(
-        `[bridge] Could not fetch body for worker message ${event.message_id} — creating thread anyway`,
+        `[bridge] Could not fetch body for worker message ${event.message_id} — skipping`,
       );
-      await getOrCreateWorkerThread(event, "", ordisChannel, sessionMap);
       return;
     }
 
-    const thread = await getOrCreateWorkerThread(
-      event,
-      msgBody,
-      ordisChannel,
-      sessionMap,
-    );
+    const thread = await getOrReuseOrdisThread(event, msgBody, ordisChannel, sessionMap, cmdRedis);
     if (!thread) return;
 
     await sendAsAgent(webhook, thread, fromAlias, msgBody);
     console.log(
-      `[bridge] ${fromAlias} → worker thread "${thread.name}": ${msgBody.slice(0, 80)}`,
+      `[bridge] ${fromAlias} → ordis activity thread "${thread.name}": ${msgBody.slice(0, 80)}`,
     );
 
     await maybeRouteToOrchestrator(event, fromAlias, msgBody, thread, cmdRedis);
@@ -233,24 +225,23 @@ const AGENT_EMOJIS: Record<string, string> = {
 };
 
 /**
- * Get or create a Discord thread in #ordis for a worker chat session.
+ * Route a worker chat message into the active ordis activity thread.
  *
- * On the first message for a session:
- *  1. Posts "🤖 Spinning up <worker> — <bead-id>" to the ordis webhook.
- *  2. Creates a Discord thread on that spin-up message.
- *  3. Stores session_id ↔ thread_id in the session map.
- *
- * On subsequent messages the existing thread is fetched and unarchived if needed.
+ * Looks up `ordis:active_thread` in Redis (set by discord-listener when the
+ * ordis activity thread is created for the current user request). On the first
+ * worker message for this BeadHub session, renames the thread to reflect the
+ * worker and task (e.g. "neo — hq-beadhub-295"), then maps the worker session
+ * to the thread so the user can reply there and have it routed back to the
+ * BeadHub chat session.
  */
-async function getOrCreateWorkerThread(
+async function getOrReuseOrdisThread(
   event: ChatMessageEvent,
   body: string,
   ordisChannel: TextChannel,
   sessionMap: SessionMap,
+  redis: Redis,
 ): Promise<ThreadChannel | null> {
-  if (!ordisWebhookConfig) return null;
-
-  // Return existing thread if already mapped
+  // If this worker session already has a thread mapped, reuse it
   const existingThreadId = await sessionMap.getThreadId(event.session_id);
   if (existingThreadId) {
     try {
@@ -260,54 +251,45 @@ async function getOrCreateWorkerThread(
         return thread;
       }
     } catch {
-      // Thread deleted or inaccessible — fall through to create a new one
+      // Thread gone — fall through to look up active thread
     }
   }
 
-  // Determine the worker alias and a task label from the message body
-  const workerAlias =
-    [event.from_alias, ...event.to_aliases].find((a) => WORKER_AGENTS.has(a)) ?? "worker";
-  const beadId = extractBeadId(body);
-  const spinupLabel = beadId
-    ? `${workerAlias} — ${beadId}`
-    : `${workerAlias} — new session`;
-
-  // Post the spin-up message to #ordis via the ordis webhook
-  const spinupResp = await fetch(`${ordisWebhookConfig.webhookUrl}?wait=true`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      username: `${AGENT_EMOJIS.ordis} ordis`,
-      content: `🤖 Spinning up ${spinupLabel}`,
-    }),
-  });
-
-  if (!spinupResp.ok) {
-    console.error(
-      `[bridge] Failed to post worker spin-up message to #ordis: ${spinupResp.status}`,
-    );
+  // Look up the active ordis activity thread for this user request
+  const activeThreadId = await redis.get("ordis:active_thread");
+  if (!activeThreadId) {
+    console.warn("[bridge] No active ordis thread found for worker message — dropping");
     return null;
   }
 
-  const spinupData = await spinupResp.json() as { id: string };
-  const spinupMsgId = spinupData.id;
+  let thread: ThreadChannel | null = null;
+  try {
+    thread = await ordisChannel.threads.fetch(activeThreadId);
+  } catch {
+    console.warn(`[bridge] Could not fetch active ordis thread ${activeThreadId} — dropping`);
+    return null;
+  }
+  if (!thread) return null;
+  if (thread.archived) await thread.setArchived(false);
 
-  // Fetch the posted message so we can start a thread on it
-  const spinupMsg = await ordisChannel.messages.fetch(spinupMsgId);
+  // Rename the thread to reflect the worker and task on first use
+  const workerAlias =
+    [event.from_alias, ...event.to_aliases].find((a) => WORKER_AGENTS.has(a)) ?? "worker";
+  const beadId = extractBeadId(body);
+  const threadName = (beadId ? `${workerAlias} — ${beadId}` : `${workerAlias} — activity`).slice(0, 100);
+  if (thread.name !== threadName) {
+    try {
+      await thread.setName(threadName);
+    } catch (err) {
+      console.warn(`[bridge] Could not rename thread: ${err}`);
+    }
+  }
 
-  // Thread name: "neo — hq-beadhub-295" (max 100 chars)
-  const threadName = spinupLabel.slice(0, 100);
-  const thread = await spinupMsg.startThread({
-    name: threadName,
-    autoArchiveDuration: 60,
-    reason: `Worker chat session ${event.session_id}`,
-  });
-
-  // Persist session ↔ thread mapping so subsequent messages route here
+  // Map worker session → thread so subsequent messages and user replies route here
   await sessionMap.setWithSource(event.session_id, thread.id, "beadhub");
 
   console.log(
-    `[bridge] Worker spin-up thread "${threadName}" created for session ${event.session_id.slice(0, 8)}...`,
+    `[bridge] Worker session ${event.session_id.slice(0, 8)}... mapped to ordis thread "${threadName}"`,
   );
   return thread;
 }
