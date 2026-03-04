@@ -132,8 +132,8 @@ async function handleChatMessage(
         if (delay > 0) await new Promise((r) => setTimeout(r, delay));
         try {
           const msgs = cpApiKey
-            ? await getSessionMessagesWithKey(event.session_id, cpApiKey, 20)
-            : await getSessionMessages(event.session_id, 20, event.project_id || undefined);
+            ? await getSessionMessagesWithKey(event.session_id, cpApiKey, 200)
+            : await getSessionMessages(event.session_id, 200, event.project_id || undefined);
           const target = msgs.find((m) => m.message_id === event.message_id);
           if (target) {
             fromAlias = target.from_agent;
