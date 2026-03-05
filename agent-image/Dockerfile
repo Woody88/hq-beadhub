@@ -14,9 +14,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     redis-tools \
     gh \
-    android-tools-adb \
     openjdk-17-jre-headless \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# ADB v35 static build — Debian only has v29, Google ships no arm64 platform-tools
+# Source: https://github.com/lzhiyong/android-sdk-tools
+ARG TARGETARCH
+RUN ADB_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
+    && curl -fsSL "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-${ADB_ARCH}.zip" \
+    -o /tmp/adb.zip \
+    && unzip -q /tmp/adb.zip platform-tools/adb -d /tmp/adb-extract \
+    && mv /tmp/adb-extract/platform-tools/adb /usr/local/bin/adb \
+    && chmod +x /usr/local/bin/adb \
+    && rm -rf /tmp/adb.zip /tmp/adb-extract
 
 # kubectl
 RUN curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/${TARGETARCH}/kubectl" \
