@@ -124,31 +124,6 @@ async function handleChatMessage(
     }
   }
 
-    if (msgBody === null || fromAlias === null) {
-      console.warn(
-        `[bridge] Could not fetch body for worker message ${event.message_id} after all retries — skipping`,
-      );
-      return;
-    }
-
-    const thread = await getOrCreateWorkerThread(
-      event,
-      msgBody,
-      ordisChannel,
-      sessionMap,
-      cmdRedis,
-    );
-    if (!thread) return;
-
-    await sendAsAgent(webhook, thread, fromAlias, msgBody);
-    console.log(
-      `[bridge] ${fromAlias} → worker thread "${thread.name}": ${msgBody.slice(0, 80)}`,
-    );
-
-    await maybeRouteToOrchestrator(event, fromAlias, msgBody, thread, cmdRedis);
-    return;
-  }
-
   if (msgBody === null) {
     console.warn(`[bridge] Could not fetch body for message ${event.message_id} after retries — skipping`);
     return;
