@@ -1,7 +1,6 @@
 import type Redis from "ioredis";
-import { WebhookClient } from "discord.js";
-import type { TextChannel, ThreadChannel } from "discord.js";
-import type { BeadHubEvent, ChatMessageEvent } from "./types.js";
+import type { TextChannel, ThreadChannel, WebhookClient } from "discord.js";
+import type { BeadHubEvent, ChatMessageEvent, MailSentEvent } from "./types.js";
 import type { SessionMap } from "./session-map.js";
 import { config } from "./config.js";
 import { getSessionMessages, getProjectRepos } from "./beadhub-client.js";
@@ -27,19 +26,9 @@ export interface OrdisWebhookConfig {
 }
 
 let ordisWebhookConfig: OrdisWebhookConfig | null = null;
-let cachedOrdisWebhook: WebhookClient | null = null;
 
 export function setOrdisWebhookConfig(cfg: OrdisWebhookConfig): void {
   ordisWebhookConfig = cfg;
-  cachedOrdisWebhook = null; // reset cache on reconfigure
-}
-
-function getOrdisWebhook(): WebhookClient | null {
-  if (!ordisWebhookConfig) return null;
-  if (!cachedOrdisWebhook) {
-    cachedOrdisWebhook = new WebhookClient({ url: ordisWebhookConfig.webhookUrl });
-  }
-  return cachedOrdisWebhook;
 }
 
 export async function startRedisListener(
@@ -63,14 +52,20 @@ export async function startRedisListener(
   sub.on("pmessage", async (_pattern: string, _chan: string, message: string) => {
     try {
       const event: BeadHubEvent = JSON.parse(message);
-      if (event.type !== "chat.message_sent") return;
 
-      const chatEvent = event as unknown as ChatMessageEvent;
+      if (event.type === "chat.message_sent") {
+        const chatEvent = event as unknown as ChatMessageEvent;
+        // Skip messages sent by the bridge itself (human Discord replies relayed to BeadHub)
+        if (chatEvent.from_alias === bridgeAlias) return;
+        await handleChatMessage(chatEvent, cmdRedis, channel, webhook, sessionMap, echoTtlMs, bridgeAlias);
+        return;
+      }
 
-      // Skip messages sent by the bridge itself (human Discord replies relayed to BeadHub)
-      if (chatEvent.from_alias === bridgeAlias) return;
-
-      await handleChatMessage(chatEvent, cmdRedis, channel, webhook, sessionMap, echoTtlMs, bridgeAlias);
+      if (event.type === "mail.sent") {
+        const mailEvent = event as unknown as MailSentEvent;
+        await handleMailEvent(mailEvent);
+        return;
+      }
     } catch (err) {
       console.error("[redis] Error handling event:", err);
     }
@@ -90,13 +85,14 @@ async function handleChatMessage(
   if (wasRelayed(event.message_id)) return;
   markRelayed(event.message_id, echoTtlMs);
 
-  // Human sessions have an `ordis:thread:{sessionId}` key set by discord-listener
-  // when the human sends a message to #ordis. Agent-only sessions (ordis ↔ neo, etc.)
-  // never have this key. BeadHub events don't populate to_aliases reliably, so we
-  // can't use the bridge alias check alone.
+  // Human↔ordis sessions are always in the control-plane project (the human messages
+  // ordis via #ordis which uses CONTROL_PLANE_API_KEY → control-plane project).
+  // Agent-only sessions (neo/hawk ↔ ordis) are in the hq-beadhub project.
+  // Checking project_id is simpler and more reliable than Redis key presence — the
+  // previous `ordis:thread:{sessionId}` key was never actually set by discord-listener.
   const isHumanSession =
     ordisWebhookConfig !== null &&
-    (await cmdRedis.exists(`ordis:thread:${event.session_id}`)) === 1;
+    event.project_id === ordisWebhookConfig.controlPlaneProjectId;
   const involvesHuman =
     isHumanSession ||
     event.from_alias === bridgeAlias ||
@@ -154,104 +150,6 @@ const AGENT_EMOJIS: Record<string, string> = {
   neo: "🔧",
   hawk: "🦅",
 };
-
-/**
- * Get or create a Discord thread in #ordis for a worker chat session.
- *
- * On the first message for a session:
- *  1. Reuses the active ordis placeholder message (if one exists) as the thread
- *     anchor — avoids posting a separate "🤖 Spinning up" message and hitting
- *     Discord's one-thread-per-message limit conflict with the activity thread.
- *     Falls back to posting a new spin-up message when no placeholder is active.
- *  2. Creates a Discord thread on that message.
- *  3. Stores session_id ↔ thread_id in the session map.
- *
- * On subsequent messages the existing thread is fetched and unarchived if needed.
- */
-async function getOrCreateWorkerThread(
-  event: ChatMessageEvent,
-  body: string,
-  ordisChannel: TextChannel,
-  sessionMap: SessionMap,
-  redis: Redis,
-): Promise<ThreadChannel | null> {
-  if (!ordisWebhookConfig) return null;
-
-  // Return existing thread if already mapped
-  const existingThreadId = await sessionMap.getThreadId(event.session_id);
-  if (existingThreadId) {
-    try {
-      const thread = await ordisChannel.threads.fetch(existingThreadId);
-      if (thread) {
-        if (thread.archived) await thread.setArchived(false);
-        return thread;
-      }
-    } catch {
-      // Thread deleted or inaccessible — fall through to create a new one
-    }
-  }
-
-  // Determine the worker alias and a task label from the message body
-  const workerAlias =
-    [event.from_alias, ...event.to_aliases].find((a) => WORKER_AGENTS.has(a)) ?? "worker";
-  const beadId = extractBeadId(body);
-  const spinupLabel = beadId
-    ? `${workerAlias} — ${beadId}`
-    : `${workerAlias} — new session`;
-
-  // Reuse the active ordis placeholder as the thread anchor if one exists.
-  // This avoids a separate spin-up message in #ordis — one message, one thread.
-  let spinupMsgId: string;
-  const latestPlaceholder = await redis.get("ordis:latest_placeholder");
-  if (latestPlaceholder) {
-    await redis.del("ordis:latest_placeholder");
-    spinupMsgId = latestPlaceholder;
-    // Update the placeholder text to reflect what's spinning up
-    await fetch(`${ordisWebhookConfig.webhookUrl}/messages/${spinupMsgId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: `🤖 Spinning up ${spinupLabel}...` }),
-    });
-    console.log(`[bridge] Reusing ordis placeholder ${spinupMsgId} as worker thread anchor`);
-  } else {
-    // No active placeholder — post a new spin-up message
-    const spinupResp = await fetch(`${ordisWebhookConfig.webhookUrl}?wait=true`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: `${AGENT_EMOJIS.ordis} ordis`,
-        content: `🤖 Spinning up ${spinupLabel}`,
-      }),
-    });
-    if (!spinupResp.ok) {
-      console.error(
-        `[bridge] Failed to post worker spin-up message to #ordis: ${spinupResp.status}`,
-      );
-      return null;
-    }
-    const spinupData = await spinupResp.json() as { id: string };
-    spinupMsgId = spinupData.id;
-  }
-
-  // Fetch the message so we can start a thread on it
-  const spinupMsg = await ordisChannel.messages.fetch(spinupMsgId);
-
-  // Thread name: "neo — hq-beadhub-295" (max 100 chars)
-  const threadName = spinupLabel.slice(0, 100);
-  const thread = await spinupMsg.startThread({
-    name: threadName,
-    autoArchiveDuration: 60,
-    reason: `Worker chat session ${event.session_id}`,
-  });
-
-  // Persist session ↔ thread mapping so subsequent messages route here
-  await sessionMap.setWithSource(event.session_id, thread.id, "beadhub");
-
-  console.log(
-    `[bridge] Worker thread "${threadName}" created for session ${event.session_id.slice(0, 8)}...`,
-  );
-  return thread;
-}
 
 /**
  * Deliver an ordis response to the #ordis Discord channel.
@@ -335,6 +233,36 @@ async function postToOrdisChannel(
   }
 
   console.log(`[bridge->ordis] ${fromAlias}: ${body.slice(0, 80)}`);
+}
+
+/**
+ * Forward a BeadHub mail message addressed to ordis into #ordis so Woodson
+ * can see it without waiting for ordis to be triggered.
+ *
+ * Only mails TO ordis are forwarded — agent-to-agent mail on other projects
+ * stays in BeadHub and is not surfaced in Discord.
+ */
+async function handleMailEvent(event: MailSentEvent): Promise<void> {
+  if (!ordisWebhookConfig) return;
+
+  const orchestratorAlias = config.orchestrator.alias;
+  if (event.to_alias !== orchestratorAlias) return;
+
+  const emoji = AGENT_EMOJIS[event.from_alias] ?? "🤖";
+  const username = `${emoji} ${event.from_alias}`;
+  const subject = event.subject ? ` [${event.subject}]` : "";
+  const content = `📬 **Mail to ordis**${subject}\n${event.body}`;
+
+  const chunks = splitMessage(content, config.maxDiscordMessageLength);
+  for (const chunk of chunks) {
+    await fetch(ordisWebhookConfig.webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, content: chunk }),
+    });
+  }
+
+  console.log(`[bridge->ordis] mail from ${event.from_alias}: ${event.body.slice(0, 80)}`);
 }
 
 function splitMessage(text: string, maxLen: number): string[] {
