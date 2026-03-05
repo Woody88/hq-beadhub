@@ -23,6 +23,23 @@ export interface BeadHubEvent {
   [key: string]: unknown;
 }
 
+/**
+ * Fired when an agent sends a BeadHub mail message.
+ * Matches the mail.sent event published by BeadHub.
+ */
+export interface MailSentEvent {
+  type: "mail.sent";
+  workspace_id: string;
+  timestamp: string;
+  project_id: string;
+  project_slug: string | null;
+  message_id: string;
+  from_alias: string;
+  to_alias: string;
+  subject?: string;
+  body: string;
+}
+
 /** Message from the admin messages API */
 export interface AdminMessage {
   message_id: string;
