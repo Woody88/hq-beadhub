@@ -265,7 +265,7 @@ async def get_session_messages_admin(
         SELECT message_id, from_alias, body, created_at
         FROM {{tables.chat_messages}}
         WHERE session_id = $1
-        ORDER BY created_at ASC
+        ORDER BY created_at DESC
         LIMIT $2
         """,
         session_uuid,
@@ -540,6 +540,7 @@ async def start_chat_session(
         message_id=str(message_id),
         from_alias=sender_alias,
         to_aliases=to_aliases,
+        body=payload.message,
         preview=payload.message[:80],
         project_id=project_id,
     )
@@ -658,6 +659,7 @@ async def send_chat_message(
         message_id=str(message_id),
         from_alias=sender_alias,
         to_aliases=other_aliases,
+        body=payload.body,
         preview=payload.body[:80],
         project_id=project_id,
     )
