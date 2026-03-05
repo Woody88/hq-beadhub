@@ -48,10 +48,21 @@ The following three agents are the **permanent team** across ALL BeadHub project
 
 **ordis MUST include these instructions in every task assignment to neo or hawk:**
 
-- Use `bdh :aweb chat send-and-wait <alias> "msg" --start-conversation` for ALL coordination during implementation: progress updates, design questions, blocker escalations, and decisions that need sign-off.
-- Use `bdh :aweb mail send ordis "msg"` ONLY for the final handoff (e.g., "PR #123 is open — summary of changes").
+- **Mid-task blockers** (design questions, unresolved dependencies, decisions that need sign-off): use `bdh :aweb chat send-and-wait ordis "question" --start-conversation`. This blocks at the CLI until ordis replies — no polling loops, no extra Claude invocations needed.
+- **Final handoff only** (PR open, task complete): use `bdh :aweb mail send ordis "status message"`. Mail is fire-and-forget and appropriate only for terminal notifications.
+- **One Claude session per task** — do NOT spawn additional `claude` processes or polling loops. The `bdh :notify` PostToolUse hook handles incoming chat mid-task automatically.
 - Do NOT use PR comments, commit messages, or issue updates as the primary communication channel with other agents.
 - **Format ALL chat messages in Discord markdown** — use ` ```language\ncode\n``` ` for code blocks, `**bold**` for emphasis, and bullet lists for structured output. Do NOT use plain text or GitHub-style markdown (no `##` headings, no `> blockquotes`). Discord renders its own markdown subset; plain text and GitHub markdown render poorly in threads.
+
+**Task prompt boilerplate (ordis MUST copy this into every task assignment):**
+
+```
+Communication rules for this task:
+- Mid-task blockers: bdh :aweb chat send-and-wait ordis "question" --start-conversation
+  (blocks at CLI until ordis replies — no polling, no extra Claude invocations)
+- Final handoff only: bdh :aweb mail send ordis "status message"
+- One Claude session per task — no polling loops, no spawning additional claude processes
+```
 
 **Why:** Discord-bridge creates a thread under the ordis "🤖 Spinning up" message for every bdh chat session involving a worker, so Woodson can observe agent conversations and intervene when needed. Mail is fire-and-forget and not surfaced in Discord; it is only appropriate for terminal notifications (handoffs).
 
