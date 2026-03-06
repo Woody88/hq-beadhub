@@ -141,6 +141,7 @@ async function handleChatMessage(
   await sendAsAgent(webhook, thread, fromAlias, msgBody);
   console.log(`[bridge] ${fromAlias} → #agent-comms thread "${thread.name}": ${msgBody.slice(0, 80)}`);
 
+  await maybeNotifyOrdisOfCompletion(fromAlias, msgBody, thread);
   await maybeRouteToOrchestrator(event, fromAlias, msgBody, thread, cmdRedis);
 }
 
@@ -280,6 +281,47 @@ function splitMessage(text: string, maxLen: number): string[] {
     remaining = remaining.slice(splitAt).replace(/^\n/, "");
   }
   return chunks;
+}
+
+/**
+ * Completion signal keywords — any message from a worker to ordis containing
+ * one of these phrases is treated as a task completion notification.
+ */
+const COMPLETION_SIGNALS = ["pr #", "ready for review", "task complete", "task completed"];
+
+function isCompletionSignal(body: string): boolean {
+  const lower = body.toLowerCase();
+  return COMPLETION_SIGNALS.some((signal) => lower.includes(signal));
+}
+
+/**
+ * When a worker sends a completion signal to ordis via chat, post a proactive
+ * notification to the #ordis channel with a link to the #agent-comms thread
+ * so Woodson is immediately informed without waiting for ordis to reply.
+ */
+async function maybeNotifyOrdisOfCompletion(
+  fromAlias: string,
+  body: string,
+  thread: ThreadChannel,
+): Promise<void> {
+  if (!ordisWebhookConfig) return;
+  if (!isCompletionSignal(body)) return;
+
+  const emoji = AGENT_EMOJIS[fromAlias] ?? "🤖";
+  const username = `${emoji} ${fromAlias}`;
+  const threadLink = `https://discord.com/channels/${thread.guildId}/${thread.id}`;
+  const content = `📣 **${fromAlias}** sent a completion update → [#agent-comms thread](${threadLink})\n${body}`;
+
+  const chunks = splitMessage(content, config.maxDiscordMessageLength);
+  for (const chunk of chunks) {
+    await fetch(ordisWebhookConfig.webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, content: chunk }),
+    });
+  }
+
+  console.log(`[bridge->ordis] completion signal from ${fromAlias}: ${body.slice(0, 80)}`);
 }
 
 /**
