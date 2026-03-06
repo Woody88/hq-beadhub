@@ -85,14 +85,13 @@ async function handleChatMessage(
   if (wasRelayed(event.message_id)) return;
   markRelayed(event.message_id, echoTtlMs);
 
-  // Human↔ordis sessions are always in the control-plane project (the human messages
-  // ordis via #ordis which uses CONTROL_PLANE_API_KEY → control-plane project).
-  // Agent-only sessions (neo/hawk ↔ ordis) are in the hq-beadhub project.
-  // Checking project_id is simpler and more reliable than Redis key presence — the
-  // previous `ordis:thread:{sessionId}` key was never actually set by discord-listener.
+  // Human sessions are identified by the presence of `ordis:user:{sessionId}` in Redis,
+  // set by discord-listener when a human sends a message from Discord.
+  // Agent sessions (neo/hawk starting a chat with ordis) never go through discord-listener
+  // so the key is never set — correctly identified as agent-only.
   const isHumanSession =
     ordisWebhookConfig !== null &&
-    event.project_id === ordisWebhookConfig.controlPlaneProjectId;
+    (await cmdRedis.exists(`ordis:user:${event.session_id}`)) === 1;
   const involvesHuman =
     isHumanSession ||
     event.from_alias === bridgeAlias ||
