@@ -89,15 +89,19 @@ function buildWorkerTask(
   alias: WorkerAlias,
   sessionId: string,
   fromAlias: string,
+  allParticipants: string[],
   body: string,
 ): string {
   const { role } = WORKER_CONFIG[alias];
+  const others = allParticipants.filter((p) => p !== alias).join(", ");
+  const replyTarget = allParticipants.filter((p) => p !== alias).join(",");
   return (
     `You are ${alias}, a ${role} agent in the BeadHub multi-agent system. ` +
-    `You have received a chat message in BeadHub session ${sessionId} from ${fromAlias}:\n\n` +
+    `You are in a group chat session (session_id: ${sessionId}) with: ${others}. ` +
+    `${fromAlias} just sent this message:\n\n` +
     `"${body}"\n\n` +
     `Read /home/node/work/CLAUDE.md for your full instructions. ` +
-    `Respond to this message using: bdh :aweb chat send-and-leave ${fromAlias} "your response". ` +
+    `Respond using: bdh :aweb chat send-and-leave "${replyTarget}" "your response". ` +
     `Then exit.`
   );
 }
@@ -110,12 +114,13 @@ export async function spawnWorkerJob(
   alias: WorkerAlias,
   sessionId: string,
   fromAlias: string,
+  allParticipants: string[],
   body: string,
   messageId: string,
 ): Promise<void> {
   const { role, repo } = WORKER_CONFIG[alias];
   const jobName = `${alias}-${messageId.slice(0, 8)}`;
-  const task = buildWorkerTask(alias, sessionId, fromAlias, body);
+  const task = buildWorkerTask(alias, sessionId, fromAlias, allParticipants, body);
   const escapedTask = task.replace(/'/g, "'\\''");
 
   const manifest = `apiVersion: batch/v1

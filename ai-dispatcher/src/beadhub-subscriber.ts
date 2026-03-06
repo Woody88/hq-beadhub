@@ -30,25 +30,31 @@ export async function startBeadHubSubscriber(redis: Redis): Promise<void> {
 
       const chat = event as ChatMessageEvent;
 
-      // Only handle messages directed at neo or hawk
-      const targetAlias = chat.to_aliases.find(isWorkerAlias);
-      if (!targetAlias) return;
+      // Find ALL worker aliases that are recipients (neo and/or hawk)
+      const targetAliases = chat.to_aliases.filter(isWorkerAlias);
+      if (targetAliases.length === 0) return;
 
-      // Dedup: BeadHub fires the event for each participant
+      // Dedup: BeadHub fires the event for each participant — only dispatch once per message
       if (dispatched.has(chat.message_id)) return;
       dispatched.add(chat.message_id);
       setTimeout(() => dispatched.delete(chat.message_id), 60_000);
 
       console.log(
-        `[beadhub-sub] Message for ${targetAlias} from ${chat.from_alias} (session ${chat.session_id.slice(0, 8)}...)`,
+        `[beadhub-sub] Message for [${targetAliases.join(", ")}] from ${chat.from_alias} (session ${chat.session_id.slice(0, 8)}...)`,
       );
 
-      await spawnWorkerJob(
-        targetAlias,
-        chat.session_id,
-        chat.from_alias,
-        chat.body,
-        chat.message_id,
+      // Spawn a Job for each targeted worker alias in parallel
+      await Promise.all(
+        targetAliases.map((alias) =>
+          spawnWorkerJob(
+            alias,
+            chat.session_id,
+            chat.from_alias,
+            chat.to_aliases,
+            chat.body,
+            chat.message_id,
+          ),
+        ),
       );
     } catch (err) {
       console.error("[beadhub-sub] Error handling event:", err);
