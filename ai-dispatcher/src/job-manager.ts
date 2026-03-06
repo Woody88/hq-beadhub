@@ -1,4 +1,5 @@
-import { config } from "./config.js";
+import { config, WORKER_CONFIG } from "./config.js";
+import type { WorkerAlias } from "./config.js";
 import { readFileSync } from "fs";
 
 let jobTemplateCache: string | null = null;
@@ -79,4 +80,124 @@ export async function ensureJob(): Promise<boolean> {
   }
   await createJob();
   return true;
+}
+
+/**
+ * Build the task prompt for a worker agent responding to a BeadHub chat message.
+ */
+function buildWorkerTask(
+  alias: WorkerAlias,
+  sessionId: string,
+  fromAlias: string,
+  allParticipants: string[],
+  body: string,
+): string {
+  const { role } = WORKER_CONFIG[alias];
+  const others = allParticipants.filter((p) => p !== alias).join(", ");
+  const replyTarget = allParticipants.filter((p) => p !== alias).join(",");
+  return (
+    `You are ${alias}, a ${role} agent in the BeadHub multi-agent system. ` +
+    `You are in a group chat session (session_id: ${sessionId}) with: ${others}. ` +
+    `${fromAlias} just sent this message:\n\n` +
+    `"${body}"\n\n` +
+    `IMPORTANT: First decide if this message is directed at you (${alias}) or relevant to your role as ${role}. ` +
+    `If the message is clearly addressed to someone else (e.g. "neo, do X" when you are hawk), ` +
+    `do NOT respond — just exit immediately without sending any BeadHub message. ` +
+    `Only respond if the message is addressed to you by name, addressed to the whole group, or clearly falls within your role. ` +
+    `If you do respond, use: bdh :aweb chat send-and-leave "${replyTarget}" "your response". ` +
+    `Read /home/node/work/CLAUDE.md for your full instructions. Then exit.`
+  );
+}
+
+/**
+ * Spawn a one-shot K8s Job for a worker agent (neo or hawk) to handle a BeadHub chat message.
+ * The Job runs claude, sends a reply via bdh, and exits — no idle polling.
+ */
+export async function spawnWorkerJob(
+  alias: WorkerAlias,
+  sessionId: string,
+  fromAlias: string,
+  allParticipants: string[],
+  body: string,
+  messageId: string,
+): Promise<void> {
+  const { role, repo } = WORKER_CONFIG[alias];
+  const jobName = `${alias}-${messageId.slice(0, 8)}`;
+  const task = buildWorkerTask(alias, sessionId, fromAlias, allParticipants, body);
+  const escapedTask = task.replace(/'/g, "'\\''");
+
+  const manifest = `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${jobName}
+  namespace: ${config.job.namespace}
+  labels:
+    app: agent-worker
+    alias: ${alias}
+    managed-by: ai-dispatcher
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: orchestrator
+      restartPolicy: Never
+      containers:
+        - name: worker
+          image: ${config.job.workerImage}
+          imagePullPolicy: Always
+          env:
+            - name: CLAUDE_CODE_USE_BEDROCK
+              value: "0"
+            - name: CLAUDE_CODE_OAUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: claude-setup-token
+                  key: token
+            - name: GH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: gh-pat
+                  key: token
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -e
+              export PATH="/home/node/.local/bin:$PATH"
+              gh auth setup-git
+              mkdir -p /home/node/.claude
+              cat > /home/node/.claude/settings.json << 'S'
+              {"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt":true}
+              S
+              cat > /home/node/.claude.json << 'S'
+              {"hasCompletedOnboarding":true,"hasTrustDialogAccepted":true,"hasTrustDialogHooksAccepted":true,"projects":{"/home/node/work":{"allowedTools":[],"hasTrustDialogAccepted":true}}}
+              S
+              gh repo clone ${repo} /home/node/work
+              cd /home/node/work
+              git config user.email "${alias}@nessei.com"
+              git config user.name "${alias}"
+              yes 2>/dev/null | bdh :init --beadhub-url ${config.beadhub.url} --project control-plane --role ${role} --alias ${alias} || true
+              claude -p '${escapedTask}' --dangerously-skip-permissions
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "3"
+              memory: 3Gi
+`;
+
+  const proc = Bun.spawn(["kubectl", "apply", "-f", "-", "-n", config.job.namespace], {
+    stdin: new Blob([manifest]),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr).text();
+    throw new Error(`Failed to spawn worker job ${jobName}: ${stderr}`);
+  }
+
+  console.log(`[job-manager] Spawned worker job ${jobName} for ${alias} (session ${sessionId.slice(0, 8)}...)`);
 }
