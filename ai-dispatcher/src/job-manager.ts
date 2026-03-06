@@ -124,7 +124,8 @@ export async function spawnWorkerJob(
   const { role, repo } = WORKER_CONFIG[alias];
   const jobName = `${alias}-${messageId.slice(0, 8)}`;
   const task = buildWorkerTask(alias, sessionId, fromAlias, allParticipants, body);
-  const escapedTask = task.replace(/'/g, "'\\''");
+  // Base64-encode the task so arbitrary content (colons, quotes, newlines) is YAML-safe
+  const taskB64 = Buffer.from(task).toString("base64");
 
   const manifest = `apiVersion: batch/v1
 kind: Job
@@ -159,6 +160,8 @@ spec:
                 secretKeyRef:
                   name: gh-pat
                   key: token
+            - name: AGENT_TASK_B64
+              value: "${taskB64}"
           command: ["bash", "-c"]
           args:
             - |
@@ -177,7 +180,8 @@ spec:
               git config user.email "${alias}@nessei.com"
               git config user.name "${alias}"
               yes 2>/dev/null | bdh :init --beadhub-url ${config.beadhub.url} --project control-plane --role ${role} --alias ${alias} || true
-              claude -p '${escapedTask}' --dangerously-skip-permissions
+              TASK=$(echo "$AGENT_TASK_B64" | base64 -d)
+              claude -p "$TASK" --dangerously-skip-permissions
           resources:
             requests:
               cpu: 500m
