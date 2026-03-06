@@ -100,9 +100,12 @@ function buildWorkerTask(
     `You are in a group chat session (session_id: ${sessionId}) with: ${others}. ` +
     `${fromAlias} just sent this message:\n\n` +
     `"${body}"\n\n` +
-    `Read /home/node/work/CLAUDE.md for your full instructions. ` +
-    `Respond using: bdh :aweb chat send-and-leave "${replyTarget}" "your response". ` +
-    `Then exit.`
+    `IMPORTANT: First decide if this message is directed at you (${alias}) or relevant to your role as ${role}. ` +
+    `If the message is clearly addressed to someone else (e.g. "neo, do X" when you are hawk), ` +
+    `do NOT respond — just exit immediately without sending any BeadHub message. ` +
+    `Only respond if the message is addressed to you by name, addressed to the whole group, or clearly falls within your role. ` +
+    `If you do respond, use: bdh :aweb chat send-and-leave "${replyTarget}" "your response". ` +
+    `Read /home/node/work/CLAUDE.md for your full instructions. Then exit.`
   );
 }
 

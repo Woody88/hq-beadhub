@@ -34,6 +34,8 @@ export const KEYS = {
   AI_INBOX: "ai:inbox",
   AI_JOB_INBOX: "ai-job:inbox",
   AI_OUTBOX: "ai:outbox",
+  ORCHESTRATOR_INBOX: "orchestrator:inbox",
+  ORCHESTRATOR_NOTIFY: "orchestrator:inbox:notify",
 } as const;
 
 function env(key: string, fallback: string): string {
