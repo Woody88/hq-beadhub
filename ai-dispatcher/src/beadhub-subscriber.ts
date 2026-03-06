@@ -56,18 +56,18 @@ export async function startBeadHubSubscriber(redis: Redis): Promise<void> {
 
       const chat = event as ChatMessageEvent;
 
-      // Skip messages sent by agents themselves (avoid echo loops)
-      if (chat.from_alias === ORDIS_ALIAS) return;
-      if (isWorkerAlias(chat.from_alias)) return;
-
       // Skip the bilateral discord-bridge ↔ ordis session — ordis's poll loop
       // already handles that via orchestrator:inbox populated by discord-bridge.
       // Only handle group sessions (where discord-bridge is NOT a participant).
       const isDiscordBridgeSession = chat.to_aliases.includes("discord-bridge");
       if (isDiscordBridgeSession) return;
 
-      const targetWorkers = chat.to_aliases.filter(isWorkerAlias);
-      const targetOrdis = chat.to_aliases.includes(ORDIS_ALIAS);
+      // For each target, skip if the sender IS that target (avoid self-reply loops)
+      const targetWorkers = chat.to_aliases
+        .filter(isWorkerAlias)
+        .filter((alias) => alias !== chat.from_alias);
+      const targetOrdis =
+        chat.to_aliases.includes(ORDIS_ALIAS) && chat.from_alias !== ORDIS_ALIAS;
 
       if (targetWorkers.length === 0 && !targetOrdis) return;
 
