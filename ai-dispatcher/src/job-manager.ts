@@ -93,8 +93,10 @@ function buildWorkerTask(
   body: string,
 ): string {
   const { role } = WORKER_CONFIG[alias];
-  const others = allParticipants.filter((p) => p !== alias).join(", ");
-  const replyTarget = allParticipants.filter((p) => p !== alias).join(",");
+  // to_aliases only contains recipients; add the sender to reconstruct the full session participant list
+  const sessionParticipants = [...new Set([...allParticipants, fromAlias])];
+  const others = sessionParticipants.filter((p) => p !== alias).join(", ");
+  const replyTarget = sessionParticipants.filter((p) => p !== alias).join(",");
   return (
     `You are ${alias}, a ${role} agent in the BeadHub multi-agent system. ` +
     `You are in a group chat session (session_id: ${sessionId}) with: ${others}. ` +
