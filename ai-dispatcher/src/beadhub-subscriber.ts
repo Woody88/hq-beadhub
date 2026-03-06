@@ -62,7 +62,13 @@ export async function startBeadHubSubscriber(redis: Redis): Promise<void> {
       const isDiscordBridgeSession = chat.to_aliases.includes("discord-bridge");
       if (isDiscordBridgeSession) return;
 
-      // For each target, skip if the sender IS that target (avoid self-reply loops)
+      // Only dispatch jobs when the sender is ordis or a human (discord-bridge).
+      // Worker-to-worker replies must NOT auto-spawn further jobs — that creates
+      // infinite ping-pong loops. Workers send their reply and exit; no re-dispatch.
+      const senderIsWorker = isWorkerAlias(chat.from_alias);
+      if (senderIsWorker) return;
+
+      // Skip if sender is the target (self-reply guard)
       const targetWorkers = chat.to_aliases
         .filter(isWorkerAlias)
         .filter((alias) => alias !== chat.from_alias);
