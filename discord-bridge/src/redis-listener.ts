@@ -141,7 +141,11 @@ async function handleChatMessage(
   await sendAsAgent(webhook, thread, fromAlias, msgBody);
   console.log(`[bridge] ${fromAlias} → #agent-comms thread "${thread.name}": ${msgBody.slice(0, 80)}`);
 
-  await maybeNotifyOrdisOfCompletion(fromAlias, msgBody, thread);
+  try {
+    await maybeNotifyOrdisOfCompletion(event, fromAlias, msgBody, thread);
+  } catch (err) {
+    console.warn("[bridge] maybeNotifyOrdisOfCompletion failed (non-fatal):", err);
+  }
   await maybeRouteToOrchestrator(event, fromAlias, msgBody, thread, cmdRedis);
 }
 
@@ -300,12 +304,21 @@ function isCompletionSignal(body: string): boolean {
  * so Woodson is immediately informed without waiting for ordis to reply.
  */
 async function maybeNotifyOrdisOfCompletion(
+  event: ChatMessageEvent,
   fromAlias: string,
   body: string,
   thread: ThreadChannel,
 ): Promise<void> {
   if (!ordisWebhookConfig) return;
   if (!isCompletionSignal(body)) return;
+
+  const orchestratorAlias = config.orchestrator.alias;
+
+  // Don't notify when the orchestrator is the sender (avoid self-notification)
+  if (fromAlias === orchestratorAlias) return;
+
+  // Only notify when the message is directed to the orchestrator
+  if (!event.to_aliases.includes(orchestratorAlias)) return;
 
   const emoji = AGENT_EMOJIS[fromAlias] ?? "🤖";
   const username = `${emoji} ${fromAlias}`;
