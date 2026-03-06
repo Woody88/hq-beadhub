@@ -1,11 +1,23 @@
+export const WORKER_ALIASES = ["neo", "hawk"] as const;
+export type WorkerAlias = (typeof WORKER_ALIASES)[number];
+
+export const WORKER_CONFIG: Record<WorkerAlias, { role: string; repo: string }> = {
+  neo: { role: "developer", repo: "Woody88/hq-beadhub" },
+  hawk: { role: "reviewer", repo: "Woody88/hq-beadhub" },
+};
+
 export const config = {
   redis: {
     url: env("REDIS_URL", "redis://localhost:16379/0"),
+  },
+  beadhub: {
+    url: env("BEADHUB_URL", "http://beadhub-api"),
   },
   job: {
     namespace: env("JOB_NAMESPACE", "beadhub"),
     name: env("JOB_NAME", "ai-job"),
     image: env("JOB_IMAGE", "ghcr.io/woody88/claude-agent:latest"),
+    workerImage: env("WORKER_IMAGE", "ghcr.io/woody88/claude-agent:sha-9e2e8b5"),
     templatePath: env("JOB_TEMPLATE_PATH", "/etc/ai-dispatcher/job-template.yaml"),
   },
   idle: {

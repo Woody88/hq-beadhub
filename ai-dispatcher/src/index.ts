@@ -2,6 +2,7 @@ import Redis from "ioredis";
 import { config } from "./config.js";
 import { startConsumer } from "./redis-consumer.js";
 import { startIdleMonitor, stopIdleMonitor } from "./idle-monitor.js";
+import { startBeadHubSubscriber } from "./beadhub-subscriber.js";
 
 async function main(): Promise<void> {
   console.log("[dispatcher] Starting AI Dispatcher...");
@@ -15,10 +16,13 @@ async function main(): Promise<void> {
   // 2. Start the main consumer loop (BLPOP ai:inbox)
   await startConsumer(redis);
 
-  // 3. Start idle monitor (deletes Job after 1hr no messages)
+  // 3. Subscribe to BeadHub events — spawn neo/hawk Jobs on demand
+  await startBeadHubSubscriber(redis);
+
+  // 4. Start idle monitor (deletes ai-job after 1hr no messages)
   startIdleMonitor();
 
-  // 4. Health check server
+  // 5. Health check server
   const healthServer = Bun.serve({
     port: config.health.port,
     fetch(req) {
@@ -38,7 +42,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`[health] Listening on :${healthServer.port}/healthz`);
-  console.log("[dispatcher] Ready — waiting for messages on ai:inbox");
+  console.log("[dispatcher] Ready — waiting for messages on ai:inbox and events:*");
 
   // Graceful shutdown
   const shutdown = async () => {

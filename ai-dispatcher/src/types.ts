@@ -20,3 +20,19 @@ export interface AiOutboxMessage {
   response: string;
   timestamp: string;
 }
+
+/** BeadHub Redis pub/sub event (events:* channel) */
+export interface BeadHubEvent {
+  type: string;
+}
+
+/** chat.message_sent event from BeadHub */
+export interface ChatMessageEvent extends BeadHubEvent {
+  type: "chat.message_sent";
+  message_id: string;
+  session_id: string;
+  from_alias: string;
+  to_aliases: string[];
+  body: string;
+  created_at: string;
+}
