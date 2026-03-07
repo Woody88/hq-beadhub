@@ -45,7 +45,7 @@ RUN npm install -g wrangler @playwright/mcp
 
 # Use system Chromium for Playwright (avoids downloading browser binaries)
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PLAYWRIGHT_MCP_EXECUTABLE_PATH=/usr/bin/chromium
 
 # beads (bd) + bdh CLI
 RUN curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash \
@@ -57,7 +57,7 @@ RUN echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node
 # Claude Code config: skip ALL interactive prompts + dangerously skip permissions
 RUN mkdir -p /home/node/.claude \
     && echo '{"hasCompletedOnboarding": true, "hasTrustDialogAccepted": true, "hasTrustDialogHooksAccepted": true}' > /home/node/.claude.json \
-    && echo '{"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt": true,"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp","--headless"]}}}' > /home/node/.claude/settings.json \
+    && echo '{"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt": true,"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp","--headless","--no-sandbox"]}}}' > /home/node/.claude/settings.json \
     && chown -R node:node /home/node/.claude /home/node/.claude.json
 
 USER node
