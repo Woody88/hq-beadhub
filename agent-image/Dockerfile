@@ -19,12 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     && rm -rf /var/lib/apt/lists/*
 
-# ADB v35 glibc-linked build — Debian only has v29, Google ships no arm64 platform-tools.
-# Use lzhiyong/android-sdk-tools dynamic (glibc) build — the static (bionic) build crashes
-# in containers due to fdsan incompatibility with the host kernel.
+# ADB v35 static build — Debian only has v29, Google ships no arm64 platform-tools.
 # Source: https://github.com/lzhiyong/android-sdk-tools
 RUN ADB_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
-    && curl -fsSL "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-${ADB_ARCH}.zip" \
+    && curl -fsSL "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-${ADB_ARCH}.zip" \
     -o /tmp/adb.zip \
     && unzip -q /tmp/adb.zip platform-tools/adb -d /tmp/adb-extract \
     && mv /tmp/adb-extract/platform-tools/adb /usr/local/bin/adb \
