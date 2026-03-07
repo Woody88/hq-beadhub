@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gh \
     openjdk-17-jre-headless \
     unzip \
+    chromium \
     && rm -rf /var/lib/apt/lists/*
 
 # ADB v35 glibc-linked build — Debian only has v29, Google ships no arm64 platform-tools.
@@ -39,13 +40,12 @@ RUN curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release
 RUN curl -fsSL "https://github.com/dolthub/dolt/releases/latest/download/dolt-linux-${TARGETARCH}.tar.gz" \
     | tar -xz -C /usr/local --strip-components=1 dolt-linux-${TARGETARCH}/bin/dolt
 
-# Wrangler
-RUN npm install -g wrangler
+# Wrangler + Playwright MCP
+RUN npm install -g wrangler @playwright/mcp
 
-# @playwright/mcp — MCP server for browser automation
-# Install globally so Claude MCP config can reference it via npx
-RUN npm install -g @playwright/mcp \
-    && npx playwright install chromium --with-deps
+# Use system Chromium for Playwright (avoids downloading browser binaries)
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 # beads (bd) + bdh CLI
 RUN curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash \
@@ -57,7 +57,7 @@ RUN echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node
 # Claude Code config: skip ALL interactive prompts + dangerously skip permissions
 RUN mkdir -p /home/node/.claude \
     && echo '{"hasCompletedOnboarding": true, "hasTrustDialogAccepted": true, "hasTrustDialogHooksAccepted": true}' > /home/node/.claude.json \
-    && printf '{"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt":true,"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp","--headless"]}}}\n' > /home/node/.claude/settings.json \
+    && echo '{"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt": true,"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp","--headless"]}}}' > /home/node/.claude/settings.json \
     && chown -R node:node /home/node/.claude /home/node/.claude.json
 
 USER node
