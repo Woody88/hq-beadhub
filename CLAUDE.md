@@ -39,32 +39,22 @@ The following three agents are the **permanent team** across ALL BeadHub project
 1. Human gives feature spec to ordis (coordinator)
 2. ordis breaks spec into Beads tickets via `bdh` CLI
 3. Human approves plan
-4. neo claims tickets, implements in a Ralph Loop (iterate: code → build → test → validate)
+4. ordis delegates to neo (persistent Deployment) via `bdh :aweb chat send-and-leave neo "task..."` — neo picks it up within ~5s
 5. Blockers resolved agent-to-agent via BeadHub chat; only true escalations surface to human
 6. neo submits PR on completion
-7. hawk reviews the PR, approves or requests changes
+7. ordis delegates review to hawk via `bdh :aweb chat send-and-leave hawk "review PR #N"`
 
 ### Worker Communication Policy
 
 **ordis MUST include these instructions in every task assignment to neo or hawk:**
 
-- **All communication** (mid-task blockers AND task completion): use `bdh :aweb chat send-and-wait ordis "message" --start-conversation`. This blocks at the CLI until ordis replies — no polling loops, no extra Claude invocations needed.
-- **Do NOT use mail** (`bdh :aweb mail send`) for any part of the worker workflow — not for handoffs, not for status updates, not for anything. Mail is not surfaced in Discord and bypasses Woodson visibility.
-- **One Claude session per task** — do NOT spawn additional `claude` processes or polling loops. The `bdh :notify` PostToolUse hook handles incoming chat mid-task automatically.
+- Use `bdh :aweb chat send-and-leave <alias> "msg"` for task delegation and status updates (non-blocking — does NOT block the caller's session).
+- Use `bdh :aweb mail send ordis "msg"` ONLY for the final handoff (e.g., "PR #123 is open — summary of changes").
+- Do NOT use `send-and-wait` for delegation — it blocks the caller's Claude session until a reply arrives.
 - Do NOT use PR comments, commit messages, or issue updates as the primary communication channel with other agents.
 - **Format ALL chat messages in Discord markdown** — use ` ```language\ncode\n``` ` for code blocks, `**bold**` for emphasis, and bullet lists for structured output. Do NOT use plain text or GitHub-style markdown (no `##` headings, no `> blockquotes`). Discord renders its own markdown subset; plain text and GitHub markdown render poorly in threads.
 
-**Task prompt boilerplate (ordis MUST copy this into every task assignment):**
-
-```
-Communication rules for this task:
-- All communication (blockers AND task completion): bdh :aweb chat send-and-wait ordis "message" --start-conversation
-  (blocks at CLI until ordis replies — no polling, no extra Claude invocations)
-- Do NOT use mail — use chat for everything including final handoff
-- One Claude session per task — no polling loops, no spawning additional claude processes
-```
-
-**Why:** Discord-bridge creates a thread under the ordis "🤖 Spinning up" message for every bdh chat session involving a worker, so Woodson can observe agent conversations and intervene when needed. Using chat for ALL communication (including task completion) ensures every handoff is visible in Discord. When ordis receives a completion signal via chat (e.g. "PR #X ready for review"), the bridge proactively posts a notification to #ordis with a link to the #agent-comms thread so Woodson is immediately informed.
+**Why:** neo and hawk are persistent Deployments that poll BeadHub chat every ~5s. Discord-bridge creates a thread in `#agent-comms` for every chat session involving a worker, and workers post real-time tool activity to those threads. Woodson can observe agent progress and intervene when needed. Mail is fire-and-forget and not surfaced in Discord; it is only appropriate for terminal notifications (handoffs).
 
 ### Key Tools
 - **`bdh`** — Beads CLI (git-native issue tracking)
@@ -195,6 +185,22 @@ Human ↔ Discord #ordis channel → discord-bridge → BeadHub chat (control-pl
 **Claude Code hooks** (settings.json):
 - `bdh :notify` — PostToolUse hook, checks for new BeadHub chat messages after every tool use
 - `discord-status.sh` — PostToolUse hook, posts tool activity to Discord (deterministic, 100% reliable)
+
+### Worker Deployments (neo/hawk)
+
+neo (developer) and hawk (reviewer) run as **persistent Deployments** in the `beadhub` namespace, polling BeadHub chat every ~5s. They use the same message-watcher pattern as ordis.
+
+**How workers operate:**
+1. Poll `$BEADHUB_API/v1/chat/pending` for actionable messages
+2. Process messages with `claude -p --output-format stream-json --verbose`
+3. Post real-time tool activity to `#agent-comms` Discord threads
+4. Reply via BeadHub chat API (response routes through discord-bridge to Discord)
+
+**Discord thread lookup:** Workers look up thread IDs from the `discord-bridge:sessions` Redis hash (set by `redis-listener.ts` / `session-map.ts`). This is different from ordis, which uses `ordis:thread:<session_id>` string keys (set by `discord-listener.ts` for `#ordis` channel).
+
+**Thread posting:** Workers use the `#agent-comms` webhook (`DISCORD_WEBHOOK_URL`) with `?thread_id=` parameter. Usernames are `🔧 neo` and `🦅 hawk`.
+
+**SKIP sentinel:** If Claude's response is just "SKIP" (or similar no-op), the response is suppressed and nothing is posted to BeadHub or Discord.
 
 ### CRITICAL: Do Not Modify the Orchestrator Deployment
 
