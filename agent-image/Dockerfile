@@ -42,6 +42,11 @@ RUN curl -fsSL "https://github.com/dolthub/dolt/releases/latest/download/dolt-li
 # Wrangler
 RUN npm install -g wrangler
 
+# @playwright/mcp — MCP server for browser automation
+# Install globally so Claude MCP config can reference it via npx
+RUN npm install -g @playwright/mcp \
+    && npx playwright install chromium --with-deps
+
 # beads (bd) + bdh CLI
 RUN curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash \
     && curl -fsSL https://raw.githubusercontent.com/beadhub/bdh/main/install.sh | bash
@@ -52,7 +57,7 @@ RUN echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node
 # Claude Code config: skip ALL interactive prompts + dangerously skip permissions
 RUN mkdir -p /home/node/.claude \
     && echo '{"hasCompletedOnboarding": true, "hasTrustDialogAccepted": true, "hasTrustDialogHooksAccepted": true}' > /home/node/.claude.json \
-    && echo '{"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt": true}' > /home/node/.claude/settings.json \
+    && printf '{"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt":true,"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp","--headless"]}}}\n' > /home/node/.claude/settings.json \
     && chown -R node:node /home/node/.claude /home/node/.claude.json
 
 USER node
