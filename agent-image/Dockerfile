@@ -19,12 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     && rm -rf /var/lib/apt/lists/*
 
-# ADB v35 glibc-linked build — Debian only has v29, Google ships no arm64 platform-tools.
-# Use lzhiyong/android-sdk-tools dynamic (glibc) build — the static (bionic) build crashes
-# in containers due to fdsan incompatibility with the host kernel.
+# ADB v35 static build — Debian only has v29, Google ships no arm64 platform-tools.
 # Source: https://github.com/lzhiyong/android-sdk-tools
 RUN ADB_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") \
-    && curl -fsSL "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-${ADB_ARCH}.zip" \
+    && curl -fsSL "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-${ADB_ARCH}.zip" \
     -o /tmp/adb.zip \
     && unzip -q /tmp/adb.zip platform-tools/adb -d /tmp/adb-extract \
     && mv /tmp/adb-extract/platform-tools/adb /usr/local/bin/adb \
@@ -43,9 +41,10 @@ RUN curl -fsSL "https://github.com/dolthub/dolt/releases/latest/download/dolt-li
 # Wrangler + Playwright MCP
 RUN npm install -g wrangler @playwright/mcp
 
-# Use system Chromium for Playwright (avoids downloading browser binaries)
+# Use system Chromium for @playwright/mcp (avoids downloading browser binaries)
+# PLAYWRIGHT_MCP_EXECUTABLE_PATH is the env var read by @playwright/mcp
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PLAYWRIGHT_MCP_EXECUTABLE_PATH=/usr/bin/chromium
 
 # beads (bd) + bdh CLI
 RUN curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash \
@@ -57,7 +56,7 @@ RUN echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node
 # Claude Code config: skip ALL interactive prompts + dangerously skip permissions
 RUN mkdir -p /home/node/.claude \
     && echo '{"hasCompletedOnboarding": true, "hasTrustDialogAccepted": true, "hasTrustDialogHooksAccepted": true}' > /home/node/.claude.json \
-    && echo '{"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt": true,"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp","--headless"]}}}' > /home/node/.claude/settings.json \
+    && echo '{"env":{"DISABLE_AUTOUPDATER":"1"},"skipDangerousModePermissionPrompt": true,"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp","--headless","--no-sandbox"]}}}' > /home/node/.claude/settings.json \
     && chown -R node:node /home/node/.claude /home/node/.claude.json
 
 USER node
